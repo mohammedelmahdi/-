@@ -93,6 +93,31 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
                 <span>البائع:</span>
                 <span>محمد إ.</span>
               </div>
+              {(sale.customerName || sale.customerPhone || sale.customerState || sale.customerMunicipality) && (
+                <>
+                  <div className="border-b border-dotted border-slate-300 my-1"></div>
+                  {sale.customerName && (
+                    <div className="flex justify-between">
+                      <span>الزبون:</span>
+                      <span className="font-bold text-slate-900">{sale.customerName}</span>
+                    </div>
+                  )}
+                  {sale.customerPhone && (
+                    <div className="flex justify-between">
+                      <span>الهاتف:</span>
+                      <span className="font-bold text-slate-950">{sale.customerPhone}</span>
+                    </div>
+                  )}
+                  {(sale.customerState || sale.customerMunicipality) && (
+                    <div className="flex justify-between">
+                      <span>العنوان:</span>
+                      <span className="font-bold text-slate-900">
+                        {[sale.customerMunicipality, sale.customerState].filter(Boolean).join('، ')}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Separator */}

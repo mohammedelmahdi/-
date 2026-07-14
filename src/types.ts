@@ -48,6 +48,10 @@ export interface Sale {
   buyingPriceAtSale: number;
   sellingPriceAtSale: number;
   items?: SaleItem[];
+  customerName?: string;
+  customerPhone?: string;
+  customerState?: string;
+  customerMunicipality?: string;
 }
 
 export type ViewType = 'dashboard' | 'stock' | 'sales';

@@ -54,6 +54,12 @@ export default function SalesManager({
   // Search History State
   const [historySearch, setHistorySearch] = useState('');
 
+  // Customer Information States for New Sale
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerState, setCustomerState] = useState(''); // الولاية
+  const [customerMunicipality, setCustomerMunicipality] = useState(''); // البلدية
+
   // Filter products available for selling (quantity > 0 or searchable)
   const sellableProducts = useMemo(() => {
     return products.filter(p => {
@@ -188,6 +194,11 @@ export default function SalesManager({
       return setSaleError('يرجى إضافة سلع إلى السلة أولاً.');
     }
 
+    // Validate customer details
+    if (!customerName.trim() || !customerPhone.trim() || !customerState.trim() || !customerMunicipality.trim()) {
+      return setSaleError('يرجى ملء جميع معلومات الزبون: الاسم، رقم الهاتف، الولاية، والبلدية.');
+    }
+
     // Check stock
     for (const item of cart) {
       const freshProduct = products.find(p => p.id === item.product.id);
@@ -275,13 +286,21 @@ export default function SalesManager({
       totalPrice: totalAmount,
       buyingPriceAtSale: totalCost / totalPairs, // Average buying price per pair for dashboard compatibility
       sellingPriceAtSale: totalAmount / totalPairs, // Average selling price per pair
-      items: saleItems
+      items: saleItems,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      customerState: customerState.trim(),
+      customerMunicipality: customerMunicipality.trim()
     });
 
     // Reset state & show success trigger
     setSaleSuccess(true);
     setCart([]);
     setProductSearch('');
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerState('');
+    setCustomerMunicipality('');
     
     setTimeout(() => {
       setSaleSuccess(false);
@@ -591,6 +610,61 @@ export default function SalesManager({
                     })}
                   </div>
 
+                  {/* Customer Information Form Section */}
+                  <div className="space-y-3 pt-4 border-t border-slate-800 text-right" dir="rtl">
+                    <h4 className="text-xs font-bold text-indigo-400 tracking-wider">3. معلومات الزبون (إجباري)</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-bold mb-1">اسم الزبون الكامل *</label>
+                        <input
+                          type="text"
+                          required
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          placeholder="مثال: أحمد محمد"
+                          className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right h-10"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-bold mb-1">رقم الهاتف *</label>
+                        <input
+                          type="tel"
+                          required
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          placeholder="مثال: 0555123456"
+                          className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right h-10"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-bold mb-1">الولاية *</label>
+                        <input
+                          type="text"
+                          required
+                          value={customerState}
+                          onChange={(e) => setCustomerState(e.target.value)}
+                          placeholder="مثال: وهران"
+                          className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right h-10"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-bold mb-1">البلدية *</label>
+                        <input
+                          type="text"
+                          required
+                          value={customerMunicipality}
+                          onChange={(e) => setCustomerMunicipality(e.target.value)}
+                          placeholder="مثال: بئر الجير"
+                          className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right h-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Pricing recap details */}
                   <div className="space-y-3 pt-4 border-t border-slate-800 text-right">
                     <div className="flex justify-between text-xs text-slate-400" dir="rtl">
@@ -708,6 +782,17 @@ export default function SalesManager({
                       </span>
                     </div>
 
+                    {(sale.customerName || sale.customerPhone || sale.customerState || sale.customerMunicipality) && (
+                      <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/40 text-[11px] text-slate-300 space-y-1 text-right" dir="rtl">
+                        <p className="font-bold text-[10px] text-indigo-400">معلومات الزبون:</p>
+                        {sale.customerName && <p>الاسم: <span className="font-extrabold text-slate-100">{sale.customerName}</span></p>}
+                        {sale.customerPhone && <p>الهاتف: <span className="font-extrabold text-slate-100 font-mono">{sale.customerPhone}</span></p>}
+                        {(sale.customerState || sale.customerMunicipality) && (
+                          <p>المقر: <span className="font-extrabold text-slate-100">{[sale.customerMunicipality, sale.customerState].filter(Boolean).join(' - ')}</span></p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex gap-2">
                       <button 
                         onClick={() => onOpenReceiptModal(sale)}
@@ -736,6 +821,7 @@ export default function SalesManager({
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider font-mono text-right">معرف البيع</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">التاريخ والوقت</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">اسم المنتج</th>
+                      <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">معلومات الزبون</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">الكمية</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">سعر الوحدة</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">الإجمالي الصافي</th>
@@ -755,6 +841,21 @@ export default function SalesManager({
                         </td>
                         <td className="p-4 font-bold text-slate-200 text-sm text-right">
                           {sale.productName}
+                        </td>
+                        <td className="p-4 text-right">
+                          {sale.customerName ? (
+                            <div className="text-xs space-y-0.5">
+                              <p className="font-bold text-slate-300">{sale.customerName}</p>
+                              {sale.customerPhone && <p className="text-slate-500 font-mono text-[10px]">{sale.customerPhone}</p>}
+                              {(sale.customerState || sale.customerMunicipality) && (
+                                <p className="text-slate-500 text-[10px]">
+                                  {[sale.customerMunicipality, sale.customerState].filter(Boolean).join(' - ')}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-600 text-xs">-</span>
+                          )}
                         </td>
                         <td className="p-4 text-center font-bold text-slate-300 text-sm">
                           {sale.quantity}
