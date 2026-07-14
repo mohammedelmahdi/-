@@ -1,0 +1,6 @@
+{
+  "name": "Gestock - Gestion de Stock et Ventes",
+  "description": "Une application mobile-first de gestion de stock et de ventes (caisse enregistreuse, tableau de bord, alertes de rupture, et simulateur de tickets de caisse thermiques) écrite en français.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
