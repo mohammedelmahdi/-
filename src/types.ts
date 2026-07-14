@@ -52,6 +52,7 @@ export interface Sale {
   customerPhone?: string;
   customerState?: string;
   customerMunicipality?: string;
+  customerColis?: number;
 }
 
 export type ViewType = 'dashboard' | 'stock' | 'sales';

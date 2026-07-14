@@ -116,6 +116,12 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
                       </span>
                     </div>
                   )}
+                  {sale.customerColis !== undefined && (
+                    <div className="flex justify-between">
+                      <span>عدد الطرود (الكوليات):</span>
+                      <span className="font-bold text-slate-950">{sale.customerColis} طرد</span>
+                    </div>
+                  )}
                 </>
               )}
             </div>

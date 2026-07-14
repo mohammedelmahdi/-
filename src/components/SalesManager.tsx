@@ -59,6 +59,7 @@ export default function SalesManager({
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerState, setCustomerState] = useState(''); // الولاية
   const [customerMunicipality, setCustomerMunicipality] = useState(''); // البلدية
+  const [customerColis, setCustomerColis] = useState(''); // عدد الكوليات / الطرود
 
   // Filter products available for selling (quantity > 0 or searchable)
   const sellableProducts = useMemo(() => {
@@ -199,6 +200,13 @@ export default function SalesManager({
       return setSaleError('يرجى ملء جميع معلومات الزبون: الاسم، رقم الهاتف، الولاية، والبلدية.');
     }
 
+    // Validate Algerian phone number (must be 10 digits starting with 05, 06, or 07, or +213 format)
+    const cleanedPhone = customerPhone.trim().replace(/[\s-]/g, '');
+    const phoneRegex = /^(0|\+213)(5|6|7)\d{8}$/;
+    if (!phoneRegex.test(cleanedPhone)) {
+      return setSaleError('رقم الهاتف غير صحيح. يرجى إدخال رقم هاتف جزائري صالح يتكون من 10 أرقام ويبدأ بـ 05 أو 06 أو 07.');
+    }
+
     // Check stock
     for (const item of cart) {
       const freshProduct = products.find(p => p.id === item.product.id);
@@ -279,6 +287,16 @@ export default function SalesManager({
       combinedName = `${cart[0].product.name} (+${cart.length - 1} موديلات)`;
     }
 
+    // Calculate colis/parcels count
+    const totalCartonsInCart = cart.reduce((sum, item) => sum + (item.sellType === 'carton' ? item.quantity : 0), 0);
+    let finalColis = totalCartonsInCart;
+    if (customerColis.trim() !== '') {
+      const parsed = parseInt(customerColis, 10);
+      if (!isNaN(parsed) && parsed >= 0) {
+        finalColis = parsed;
+      }
+    }
+
     onAddSale({
       productId: cart[0].product.id, // For backwards compatibility
       productName: combinedName,
@@ -290,7 +308,8 @@ export default function SalesManager({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       customerState: customerState.trim(),
-      customerMunicipality: customerMunicipality.trim()
+      customerMunicipality: customerMunicipality.trim(),
+      customerColis: finalColis
     });
 
     // Reset state & show success trigger
@@ -301,6 +320,7 @@ export default function SalesManager({
     setCustomerPhone('');
     setCustomerState('');
     setCustomerMunicipality('');
+    setCustomerColis('');
     
     setTimeout(() => {
       setSaleSuccess(false);
@@ -662,6 +682,18 @@ export default function SalesManager({
                           className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right h-10"
                         />
                       </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-bold mb-1">عدد الكوليات (الطرود) - اختياري</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={customerColis}
+                          onChange={(e) => setCustomerColis(e.target.value)}
+                          placeholder={`تلقائي: ${cart.reduce((sum, item) => sum + (item.sellType === 'carton' ? item.quantity : 0), 0)} طرد`}
+                          className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right h-10"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -790,6 +822,9 @@ export default function SalesManager({
                         {(sale.customerState || sale.customerMunicipality) && (
                           <p>المقر: <span className="font-extrabold text-slate-100">{[sale.customerMunicipality, sale.customerState].filter(Boolean).join(' - ')}</span></p>
                         )}
+                        {sale.customerColis !== undefined && (
+                          <p>عدد الكوليات (الطرود): <span className="font-extrabold text-indigo-400">{sale.customerColis} طرد</span></p>
+                        )}
                       </div>
                     )}
 
@@ -851,6 +886,9 @@ export default function SalesManager({
                                 <p className="text-slate-500 text-[10px]">
                                   {[sale.customerMunicipality, sale.customerState].filter(Boolean).join(' - ')}
                                 </p>
+                              )}
+                              {sale.customerColis !== undefined && (
+                                <p className="text-indigo-400 font-bold text-[10px]">الطرود: {sale.customerColis} كولية</p>
                               )}
                             </div>
                           ) : (
