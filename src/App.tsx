@@ -215,7 +215,9 @@ export default function App() {
       const errMsg = err?.message || '';
       const errCode = err?.code || '';
       
-      if (errCode === 'auth/popup-closed-by-user' || errMsg.includes('popup-closed-by-user')) {
+      if (errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain') || errMsg.includes('unauthorized')) {
+        setAuthError('خطأ: النطاق الحالي (g-stoc.netlify.app) غير مصرح به لعمليات تسجيل الدخول في Firebase. يرجى إضافته إلى قائمة "المجالات المصرح بها" (Authorized domains) في إعدادات Firebase Console الخاص بـ Authentication.');
+      } else if (errCode === 'auth/popup-closed-by-user' || errMsg.includes('popup-closed-by-user')) {
         setAuthError('تنبيه: تم إغلاق النافذة قبل إتمام تسجيل الدخول. لحل المشكلة، يرجى فتح التطبيق في علامة تبويب جديدة ثم المحاولة مجدداً.');
       } else if (errCode === 'auth/cancelled-popup-request' || errMsg.includes('cancelled-popup-request')) {
         setAuthError('تنبيه: تم حظر النافذة أو إلغاء الطلب من المتصفح (Iframe). يرجى فتح التطبيق في علامة تبويب جديدة وتفعيل السماح بالنوافذ المنبثقة.');
