@@ -1,5 +1,5 @@
 import { useState, useMemo, FormEvent } from 'react';
-import { Product, Sale, formatCurrency } from '../types';
+import { Product, Sale, SaleStatus, formatCurrency } from '../types';
 import { 
   ShoppingCart, 
   History, 
@@ -22,6 +22,7 @@ interface SalesManagerProps {
   onDeleteSale: (saleId: string) => void;
   onViewReceipt: (sale: Sale) => void;
   onOpenReceiptModal: (sale: Sale) => void;
+  onUpdateSaleStatus: (saleId: string, status: SaleStatus) => void;
 }
 
 export default function SalesManager({ 
@@ -29,7 +30,8 @@ export default function SalesManager({
   sales, 
   onAddSale, 
   onDeleteSale,
-  onOpenReceiptModal 
+  onOpenReceiptModal,
+  onUpdateSaleStatus
 }: SalesManagerProps) {
   
   // Tab State
@@ -828,6 +830,36 @@ export default function SalesManager({
                       </div>
                     )}
 
+                    {/* Order Status Tracker */}
+                    <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 text-xs" dir="rtl">
+                      <span className="text-slate-400 font-bold">حالة الطلب:</span>
+                      <div className="flex items-center gap-2">
+                        {sale.status === 'delivered' && (
+                          <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[10px] font-bold">تم التوصيل ✅</span>
+                        )}
+                        {sale.status === 'shipped' && (
+                          <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-[10px] font-bold">تم الشحن 🚚</span>
+                        )}
+                        {sale.status === 'returned' && (
+                          <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-md text-[10px] font-bold">مسترجع ↩️</span>
+                        )}
+                        {(sale.status === 'pending' || !sale.status) && (
+                          <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-[10px] font-bold">قيد الانتظار ⏳</span>
+                        )}
+
+                        <select
+                          value={sale.status || 'pending'}
+                          onChange={(e) => onUpdateSaleStatus(sale.id, e.target.value as SaleStatus)}
+                          className="bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300 rounded-lg px-2 py-1 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 cursor-pointer h-7"
+                        >
+                          <option value="pending">تغيير: انتظار</option>
+                          <option value="shipped">تغيير: شحن</option>
+                          <option value="delivered">تغيير: توصيل</option>
+                          <option value="returned">تغيير: إرجاع</option>
+                        </select>
+                      </div>
+                    </div>
+
                     <div className="flex gap-2">
                       <button 
                         onClick={() => onOpenReceiptModal(sale)}
@@ -857,6 +889,7 @@ export default function SalesManager({
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">التاريخ والوقت</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">اسم المنتج</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">معلومات الزبون</th>
+                      <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">حالة الطلب</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">الكمية</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">سعر الوحدة</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">الإجمالي الصافي</th>
@@ -894,6 +927,33 @@ export default function SalesManager({
                           ) : (
                             <span className="text-slate-600 text-xs">-</span>
                           )}
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex flex-col gap-1 items-start">
+                            {sale.status === 'delivered' && (
+                              <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[10px] font-bold">تم التوصيل ✅</span>
+                            )}
+                            {sale.status === 'shipped' && (
+                              <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-[10px] font-bold">تم الشحن 🚚</span>
+                            )}
+                            {sale.status === 'returned' && (
+                              <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-md text-[10px] font-bold">مسترجع ↩️</span>
+                            )}
+                            {(sale.status === 'pending' || !sale.status) && (
+                              <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-[10px] font-bold">قيد الانتظار ⏳</span>
+                            )}
+
+                            <select
+                              value={sale.status || 'pending'}
+                              onChange={(e) => onUpdateSaleStatus(sale.id, e.target.value as SaleStatus)}
+                              className="bg-slate-950 border border-slate-800 text-[10px] font-bold text-slate-300 rounded-lg px-1.5 py-0.5 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 cursor-pointer h-6"
+                            >
+                              <option value="pending">انتظار</option>
+                              <option value="shipped">تم الشحن</option>
+                              <option value="delivered">تم التوصيل</option>
+                              <option value="returned">مسترجع</option>
+                            </select>
+                          </div>
                         </td>
                         <td className="p-4 text-center font-bold text-slate-300 text-sm">
                           {sale.quantity}

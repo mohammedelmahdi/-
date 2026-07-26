@@ -38,6 +38,8 @@ export interface SaleItem {
   imageUrl?: string;
 }
 
+export type SaleStatus = 'pending' | 'shipped' | 'delivered' | 'returned';
+
 export interface Sale {
   id: string;
   date: string; // ISO string
@@ -53,11 +55,28 @@ export interface Sale {
   customerState?: string;
   customerMunicipality?: string;
   customerColis?: number;
+  status?: SaleStatus;
 }
 
-export type ViewType = 'dashboard' | 'stock' | 'sales';
+export interface Expense {
+  id: string;
+  title: string;       // عنوان المصروف
+  amount: number;      // المبلغ بالدينار
+  date: string;        // تاريخ المصروف (ISO)
+  category: string;    // فئة المصروف
+  notes?: string;      // ملاحظات إضافية
+}
+
+export interface PackagingPayment {
+  id: string;
+  date: string;        // تاريخ الدفع (ISO)
+  amountPaid: number;  // المبلغ المدفوع بالدينار
+  notes?: string;      // ملاحظات إضافية
+}
+
+export type ViewType = 'dashboard' | 'stock' | 'sales' | 'expenses';
 
 export const formatCurrency = (amount: number): string => {
-  return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} د.ج`;
+  return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} د.ج`;
 };
 

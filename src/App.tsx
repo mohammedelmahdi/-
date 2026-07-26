@@ -4,12 +4,13 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Product, Sale, ViewType } from './types';
+import { Product, Sale, ViewType, Expense, PackagingPayment, SaleStatus } from './types';
 import Splash from './components/Splash';
 import Dashboard from './components/Dashboard';
 import StockManager from './components/StockManager';
 import SalesManager from './components/SalesManager';
 import ReceiptModal from './components/ReceiptModal';
+import ExpensesManager from './components/ExpensesManager';
 import { 
   LayoutDashboard, 
   Package, 
@@ -22,7 +23,8 @@ import {
   LogOut,
   RefreshCw,
   ExternalLink,
-  X
+  X,
+  TrendingDown
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { 
@@ -36,6 +38,8 @@ import {
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'gestock_inventory_products_dz_v2';
 const LOCAL_STORAGE_SALES_KEY = 'gestock_inventory_sales_dz_v2';
+const LOCAL_STORAGE_EXPENSES_KEY = 'gestock_expenses_v2';
+const LOCAL_STORAGE_PACKAGING_PAYMENTS_KEY = 'gestock_packaging_payments_v2';
 
 // Initial sample inventory in Arabic with Algerian Dinar (DZD) scale
 const SAMPLE_PRODUCTS: Product[] = [
@@ -90,6 +94,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [packagingPayments, setPackagingPayments] = useState<PackagingPayment[]>([]);
   const [selectedReceiptSale, setSelectedReceiptSale] = useState<Sale | null>(null);
 
   // Google Sheets database states
@@ -126,6 +132,27 @@ export default function App() {
       const initialSales = generateSampleSales();
       setSales(initialSales);
       localStorage.setItem(LOCAL_STORAGE_SALES_KEY, JSON.stringify(initialSales));
+    }
+
+    // Load expenses
+    const savedExpenses = localStorage.getItem(LOCAL_STORAGE_EXPENSES_KEY);
+    if (savedExpenses) {
+      setExpenses(JSON.parse(savedExpenses));
+    } else {
+      const initialExpenses = [
+        { id: 'exp-1', title: 'إعلان فيسبوك لشهر جويلية', amount: 8000, date: new Date().toISOString().split('T')[0], category: 'إعلانات / تسويق', notes: 'حملة ترويجية لصفحة فيسبوك' },
+        { id: 'exp-2', title: 'شحن بضاعة من العاصمة', amount: 3500, date: new Date().toISOString().split('T')[0], category: 'شحن / نقل', notes: 'توصيل البضائع للمحل' }
+      ];
+      setExpenses(initialExpenses);
+      localStorage.setItem(LOCAL_STORAGE_EXPENSES_KEY, JSON.stringify(initialExpenses));
+    }
+
+    // Load packaging payments
+    const savedPackagingPayments = localStorage.getItem(LOCAL_STORAGE_PACKAGING_PAYMENTS_KEY);
+    if (savedPackagingPayments) {
+      setPackagingPayments(JSON.parse(savedPackagingPayments));
+    } else {
+      setPackagingPayments([]);
     }
 
     // Load saved Google Sheet ID
@@ -342,6 +369,51 @@ export default function App() {
     syncProducts(nextProducts);
   };
 
+  // Update sale status handler
+  const handleUpdateSaleStatus = (saleId: string, status: SaleStatus) => {
+    const updatedSales = sales.map(s => {
+      if (s.id === saleId) {
+        return { ...s, status };
+      }
+      return s;
+    });
+    syncSales(updatedSales);
+  };
+
+  // Expense Handlers
+  const handleAddExpense = (newExp: Omit<Expense, 'id'>) => {
+    const nextExpense: Expense = {
+      ...newExp,
+      id: `exp-${Math.floor(10000 + Math.random() * 90000)}`
+    };
+    const nextExpenses = [...expenses, nextExpense];
+    setExpenses(nextExpenses);
+    localStorage.setItem(LOCAL_STORAGE_EXPENSES_KEY, JSON.stringify(nextExpenses));
+  };
+
+  const handleDeleteExpense = (id: string) => {
+    const nextExpenses = expenses.filter(e => e.id !== id);
+    setExpenses(nextExpenses);
+    localStorage.setItem(LOCAL_STORAGE_EXPENSES_KEY, JSON.stringify(nextExpenses));
+  };
+
+  // Packaging Payments Handlers
+  const handleAddPackagingPayment = (newPay: Omit<PackagingPayment, 'id'>) => {
+    const nextPay: PackagingPayment = {
+      ...newPay,
+      id: `pkg-${Math.floor(10000 + Math.random() * 90000)}`
+    };
+    const nextPayments = [...packagingPayments, nextPay];
+    setPackagingPayments(nextPayments);
+    localStorage.setItem(LOCAL_STORAGE_PACKAGING_PAYMENTS_KEY, JSON.stringify(nextPayments));
+  };
+
+  const handleDeletePackagingPayment = (id: string) => {
+    const nextPayments = packagingPayments.filter(p => p.id !== id);
+    setPackagingPayments(nextPayments);
+    localStorage.setItem(LOCAL_STORAGE_PACKAGING_PAYMENTS_KEY, JSON.stringify(nextPayments));
+  };
+
   // Splash complete
   const handleSplashComplete = () => {
     setIsSplashShowing(false);
@@ -409,6 +481,19 @@ export default function App() {
             >
               <ShoppingCart className="w-4 h-4" />
               الصندوق والمبيعات
+            </button>
+
+            {/* Nav Link: Expenses */}
+            <button
+              onClick={() => setCurrentView('expenses')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                currentView === 'expenses'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-900/30'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <TrendingDown className="w-4 h-4" />
+              المصاريف والتغليف
             </button>
 
           </nav>
@@ -574,6 +659,19 @@ export default function App() {
             onDeleteSale={handleDeleteSale}
             onViewReceipt={(sale) => setSelectedReceiptSale(sale)}
             onOpenReceiptModal={(sale) => setSelectedReceiptSale(sale)}
+            onUpdateSaleStatus={handleUpdateSaleStatus}
+          />
+        )}
+
+        {currentView === 'expenses' && (
+          <ExpensesManager 
+            sales={sales}
+            expenses={expenses}
+            packagingPayments={packagingPayments}
+            onAddExpense={handleAddExpense}
+            onDeleteExpense={handleDeleteExpense}
+            onAddPackagingPayment={handleAddPackagingPayment}
+            onDeletePackagingPayment={handleDeletePackagingPayment}
           />
         )}
 
@@ -613,6 +711,17 @@ export default function App() {
         >
           <ShoppingCart className={`w-5 h-5 ${currentView === 'sales' ? 'scale-110' : ''}`} />
           <span className="text-[10px] font-bold mt-1">المبيعات</span>
+        </button>
+
+        {/* Tab Trigger: Expenses */}
+        <button
+          onClick={() => setCurrentView('expenses')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 cursor-pointer transition-all ${
+            currentView === 'expenses' ? 'text-emerald-400' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <TrendingDown className={`w-5 h-5 ${currentView === 'expenses' ? 'scale-110' : ''}`} />
+          <span className="text-[10px] font-bold mt-1">المصاريف</span>
         </button>
 
       </nav>

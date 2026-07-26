@@ -118,10 +118,10 @@ const initializeSheetHeaders = async (accessToken: string, spreadsheetId: string
 
   // Write headers for Sales
   const salesHeaders = [
-    ['معرف البيع (Sale ID)', 'التاريخ (Date)', 'اسم الموديل (Model Name)', 'الكمية الكلية بالأزواج (Total Pairs Sold)', 'المبلغ الإجمالي (Total Paid)', 'نوع البيع (Sell Type)', 'الكراتين المباعة (Cartons Quantity)', 'الأزواج المباعة (Pairs Quantity)', 'المنتجات الفرعية (Sub Items)', 'اسم الزبون (Customer Name)', 'رقم الهاتف (Phone)', 'الولاية (State/Wilaya)', 'البلدية (Municipality/Baladiya)', 'عدد الكوليات (Number of Parcels)']
+    ['معرف البيع (Sale ID)', 'التاريخ (Date)', 'اسم الموديل (Model Name)', 'الكمية الكلية بالأزواج (Total Pairs Sold)', 'المبلغ الإجمالي (Total Paid)', 'نوع البيع (Sell Type)', 'الكراتين المباعة (Cartons Quantity)', 'الأزواج المباعة (Pairs Quantity)', 'المنتجات الفرعية (Sub Items)', 'اسم الزبون (Customer Name)', 'رقم الهاتف (Phone)', 'الولاية (State/Wilaya)', 'البلدية (Municipality/Baladiya)', 'عدد الكوليات (Number of Parcels)', 'حالة الطلب (Order Status)']
   ];
 
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A1:N1")}?valueInputOption=USER_ENTERED`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A1:O1")}?valueInputOption=USER_ENTERED`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -178,6 +178,13 @@ export const syncProductsToSheet = async (accessToken: string, spreadsheetId: st
 
 // Sync Sales to Google Sheet
 export const syncSalesToSheet = async (accessToken: string, spreadsheetId: string, sales: Sale[]) => {
+  const statusMap: Record<string, string> = {
+    pending: 'قيد الانتظار',
+    shipped: 'تم الشحن',
+    delivered: 'تم التوصيل',
+    returned: 'مسترجع'
+  };
+
   const values = sales.map(s => {
     const itemsDetails = s.items && s.items.length > 0 
       ? s.items.map(item => `${item.productName} (${item.sellType === 'carton' ? `${item.cartonsQuantity} كرتون` : `${item.pairsQuantity} زوج`})`).join(' | ')
@@ -201,18 +208,19 @@ export const syncSalesToSheet = async (accessToken: string, spreadsheetId: strin
       s.customerPhone || '',
       s.customerState || '',
       s.customerMunicipality || '',
-      s.customerColis || 0
+      s.customerColis || 0,
+      statusMap[s.status || 'pending'] || 'قيد الانتظار'
     ];
   });
 
   // Clear previous values first
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:N2000")}:clear`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:O2000")}:clear`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` }
   });
 
   if (values.length > 0) {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:N" + (1 + values.length))}?valueInputOption=USER_ENTERED`, {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:O" + (1 + values.length))}?valueInputOption=USER_ENTERED`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${accessToken}`,
