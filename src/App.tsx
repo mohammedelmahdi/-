@@ -96,6 +96,7 @@ export default function App() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [packagingPayments, setPackagingPayments] = useState<PackagingPayment[]>([]);
+  const [packagingPrice, setPackagingPrice] = useState<number>(100);
   const [selectedReceiptSale, setSelectedReceiptSale] = useState<Sale | null>(null);
 
   // Google Sheets database states
@@ -153,6 +154,14 @@ export default function App() {
       setPackagingPayments(JSON.parse(savedPackagingPayments));
     } else {
       setPackagingPayments([]);
+    }
+
+    // Load packaging price
+    const savedPackagingPrice = localStorage.getItem('gestock_packaging_price');
+    if (savedPackagingPrice) {
+      setPackagingPrice(Number(savedPackagingPrice));
+    } else {
+      setPackagingPrice(100);
     }
 
     // Load saved Google Sheet ID
@@ -378,6 +387,86 @@ export default function App() {
       return s;
     });
     syncSales(updatedSales);
+  };
+
+  // Update sale info handler with automatic stock adjustment
+  const handleUpdateSale = (updatedSale: Sale) => {
+    const oldSale = sales.find(s => s.id === updatedSale.id);
+    if (!oldSale) return;
+
+    // 1. Revert old sale stock effects
+    let tempProducts = [...products];
+    if (oldSale.items && oldSale.items.length > 0) {
+      oldSale.items.forEach(item => {
+        tempProducts = tempProducts.map(p => {
+          if (p.id === item.productId) {
+            const nextQty = p.quantity + item.quantity;
+            const pairsPerCtn = p.pairsPerCarton || 12;
+            return {
+              ...p,
+              quantity: nextQty,
+              cartonsCount: Math.max(0, Math.floor(nextQty / pairsPerCtn))
+            };
+          }
+          return p;
+        });
+      });
+    } else {
+      tempProducts = tempProducts.map(p => {
+        if (p.id === oldSale.productId) {
+          const nextQty = p.quantity + oldSale.quantity;
+          const pairsPerCtn = p.pairsPerCarton || 12;
+          return {
+            ...p,
+            quantity: nextQty,
+            cartonsCount: Math.max(0, Math.floor(nextQty / pairsPerCtn))
+          };
+        }
+        return p;
+      });
+    }
+
+    // 2. Apply new sale stock effects
+    let nextProducts = [...tempProducts];
+    if (updatedSale.items && updatedSale.items.length > 0) {
+      updatedSale.items.forEach(item => {
+        nextProducts = nextProducts.map(p => {
+          if (p.id === item.productId) {
+            const nextQty = Math.max(0, p.quantity - item.quantity);
+            const pairsPerCtn = p.pairsPerCarton || 12;
+            return {
+              ...p,
+              quantity: nextQty,
+              cartonsCount: Math.max(0, Math.floor(nextQty / pairsPerCtn))
+            };
+          }
+          return p;
+        });
+      });
+    } else {
+      nextProducts = nextProducts.map(p => {
+        if (p.id === updatedSale.productId) {
+          const nextQty = Math.max(0, p.quantity - updatedSale.quantity);
+          const pairsPerCtn = p.pairsPerCarton || 12;
+          return {
+            ...p,
+            quantity: nextQty,
+            cartonsCount: Math.max(0, Math.floor(nextQty / pairsPerCtn))
+          };
+        }
+        return p;
+      });
+    }
+
+    const updatedSales = sales.map(s => s.id === updatedSale.id ? updatedSale : s);
+    syncSales(updatedSales);
+    syncProducts(nextProducts);
+  };
+
+  // Update packaging price
+  const handleUpdatePackagingPrice = (price: number) => {
+    setPackagingPrice(price);
+    localStorage.setItem('gestock_packaging_price', String(price));
   };
 
   // Expense Handlers
@@ -636,6 +725,8 @@ export default function App() {
           <Dashboard 
             products={products}
             sales={sales}
+            expenses={expenses}
+            packagingPrice={packagingPrice}
             onNavigateToStock={() => setCurrentView('stock')}
             onNavigateToSales={() => setCurrentView('sales')}
             onViewReceipt={(sale) => setSelectedReceiptSale(sale)}
@@ -660,6 +751,7 @@ export default function App() {
             onViewReceipt={(sale) => setSelectedReceiptSale(sale)}
             onOpenReceiptModal={(sale) => setSelectedReceiptSale(sale)}
             onUpdateSaleStatus={handleUpdateSaleStatus}
+            onUpdateSale={handleUpdateSale}
           />
         )}
 
@@ -668,6 +760,8 @@ export default function App() {
             sales={sales}
             expenses={expenses}
             packagingPayments={packagingPayments}
+            packagingPrice={packagingPrice}
+            onUpdatePackagingPrice={handleUpdatePackagingPrice}
             onAddExpense={handleAddExpense}
             onDeleteExpense={handleDeleteExpense}
             onAddPackagingPayment={handleAddPackagingPayment}

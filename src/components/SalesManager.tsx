@@ -1,5 +1,5 @@
-import { useState, useMemo, FormEvent } from 'react';
-import { Product, Sale, SaleStatus, formatCurrency } from '../types';
+import { useState, useMemo, useEffect, FormEvent } from 'react';
+import { Product, Sale, SaleItem, SaleStatus, formatCurrency } from '../types';
 import { 
   ShoppingCart, 
   History, 
@@ -12,7 +12,8 @@ import {
   Calendar, 
   X,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Edit2
 } from 'lucide-react';
 
 interface SalesManagerProps {
@@ -23,6 +24,7 @@ interface SalesManagerProps {
   onViewReceipt: (sale: Sale) => void;
   onOpenReceiptModal: (sale: Sale) => void;
   onUpdateSaleStatus: (saleId: string, status: SaleStatus) => void;
+  onUpdateSale: (sale: Sale) => void;
 }
 
 export default function SalesManager({ 
@@ -31,7 +33,8 @@ export default function SalesManager({
   onAddSale, 
   onDeleteSale,
   onOpenReceiptModal,
-  onUpdateSaleStatus
+  onUpdateSaleStatus,
+  onUpdateSale
 }: SalesManagerProps) {
   
   // Tab State
@@ -62,6 +65,201 @@ export default function SalesManager({
   const [customerState, setCustomerState] = useState(''); // الولاية
   const [customerMunicipality, setCustomerMunicipality] = useState(''); // البلدية
   const [customerColis, setCustomerColis] = useState(''); // عدد الكوليات / الطرود
+
+  // Editing Sale States
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerState, setEditCustomerState] = useState('');
+  const [editCustomerMunicipality, setEditCustomerMunicipality] = useState('');
+  const [editCustomerColis, setEditCustomerColis] = useState<string>('');
+  const [editTotalPrice, setEditTotalPrice] = useState<string>('');
+  const [editItems, setEditItems] = useState<SaleItem[]>([]);
+  const [editProductSearch, setEditProductSearch] = useState('');
+
+  const startEditingSale = (sale: Sale) => {
+    setEditingSale(sale);
+    setEditCustomerName(sale.customerName || '');
+    setEditCustomerPhone(sale.customerPhone || '');
+    setEditCustomerState(sale.customerState || '');
+    setEditCustomerMunicipality(sale.customerMunicipality || '');
+    setEditCustomerColis(sale.customerColis !== undefined ? String(sale.customerColis) : '1');
+    
+    const initialItems = sale.items && sale.items.length > 0 
+      ? [...sale.items] 
+      : [{
+          productId: sale.productId,
+          productName: sale.productName,
+          quantity: sale.quantity,
+          buyingPriceAtSale: sale.buyingPriceAtSale,
+          sellingPriceAtSale: sale.sellingPriceAtSale,
+          totalPrice: sale.totalPrice,
+          sellType: 'pair' as const,
+          cartonsQuantity: 0,
+          pairsQuantity: sale.quantity
+        }];
+    setEditItems(initialItems);
+    setEditTotalPrice(String(sale.totalPrice));
+    setEditProductSearch('');
+  };
+
+  const updateEditItemQty = (index: number, newQty: number) => {
+    const updated = [...editItems];
+    const item = updated[index];
+    const product = products.find(p => p.id === item.productId);
+    const pairsPerCtn = product?.pairsPerCarton || 12;
+
+    if (item.sellType === 'carton') {
+      item.cartonsQuantity = Math.max(1, newQty);
+      item.quantity = item.cartonsQuantity * pairsPerCtn;
+    } else {
+      item.pairsQuantity = Math.max(1, newQty);
+      item.quantity = item.pairsQuantity;
+    }
+    item.totalPrice = (item.sellType === 'carton' ? item.cartonsQuantity : item.pairsQuantity) * item.sellingPriceAtSale;
+    setEditItems(updated);
+  };
+
+  const updateEditItemPrice = (index: number, newPrice: number) => {
+    const updated = [...editItems];
+    const item = updated[index];
+    item.sellingPriceAtSale = Math.max(0, newPrice);
+    item.totalPrice = (item.sellType === 'carton' ? item.cartonsQuantity : item.pairsQuantity) * item.sellingPriceAtSale;
+    setEditItems(updated);
+  };
+
+  const updateEditItemSellType = (index: number, sellType: 'carton' | 'pair') => {
+    const updated = [...editItems];
+    const item = updated[index];
+    const product = products.find(p => p.id === item.productId);
+    const pairsPerCtn = product?.pairsPerCarton || 12;
+
+    const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || 0;
+    const singleSelling = product?.singlePairSellingPrice || product?.sellingPrice || 0;
+    const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
+    const cartonSelling = product?.sellingPricePerCarton || (singleSelling * pairsPerCtn);
+
+    item.sellType = sellType;
+    if (sellType === 'carton') {
+      item.cartonsQuantity = 1;
+      item.pairsQuantity = 0;
+      item.quantity = pairsPerCtn;
+      item.buyingPriceAtSale = cartonBuying;
+      item.sellingPriceAtSale = cartonSelling;
+      item.totalPrice = cartonSelling;
+    } else {
+      item.cartonsQuantity = 0;
+      item.pairsQuantity = 1;
+      item.quantity = 1;
+      item.buyingPriceAtSale = singleBuying;
+      item.sellingPriceAtSale = singleSelling;
+      item.totalPrice = singleSelling;
+    }
+    setEditItems(updated);
+  };
+
+  const deleteEditItem = (index: number) => {
+    const updated = editItems.filter((_, i) => i !== index);
+    setEditItems(updated);
+  };
+
+  const addProductToEditItems = (product: Product) => {
+    const alreadyIn = editItems.some(item => item.productId === product.id);
+    if (alreadyIn) return;
+
+    const pairsPerCtn = product.pairsPerCarton || 12;
+    const singleBuying = product.singlePairBuyingPrice || product.buyingPrice;
+    const singleSelling = product.singlePairSellingPrice || product.sellingPrice;
+    const cartonBuying = product.buyingPricePerCarton || (singleBuying * pairsPerCtn);
+    const cartonSelling = product.sellingPricePerCarton || (singleSelling * pairsPerCtn);
+
+    const newItem: SaleItem = {
+      productId: product.id,
+      productName: product.name,
+      quantity: pairsPerCtn,
+      buyingPriceAtSale: cartonBuying,
+      sellingPriceAtSale: cartonSelling,
+      totalPrice: cartonSelling,
+      sellType: 'carton',
+      cartonsQuantity: 1,
+      pairsQuantity: 0,
+      sku: product.sku,
+      imageUrl: product.imageUrl
+    };
+
+    setEditItems([...editItems, newItem]);
+    setEditProductSearch('');
+  };
+
+  const computedEditTotalPrice = useMemo(() => {
+    return editItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  }, [editItems]);
+
+  useEffect(() => {
+    if (editingSale) {
+      setEditTotalPrice(String(computedEditTotalPrice));
+    }
+  }, [computedEditTotalPrice, editingSale]);
+
+  const editSearchableProducts = useMemo(() => {
+    if (!editProductSearch.trim()) return [];
+    return products.filter(p => 
+      p.name.toLowerCase().includes(editProductSearch.toLowerCase()) || 
+      p.sku.toLowerCase().includes(editProductSearch.toLowerCase())
+    );
+  }, [products, editProductSearch]);
+
+  const handleSaveEditSale = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingSale) return;
+
+    if (editItems.length === 0) {
+      alert("لا يمكن حفظ مبيعة بدون منتجات. يرجى إضافة منتج واحد على الأقل.");
+      return;
+    }
+
+    let combinedName = '';
+    if (editItems.length === 1) {
+      combinedName = editItems[0].productName;
+    } else {
+      combinedName = `${editItems[0].productName} (+${editItems.length - 1} موديلات)`;
+    }
+
+    const totalPairs = editItems.reduce((sum, item) => sum + item.quantity, 0);
+    const finalPrice = editTotalPrice ? Number(editTotalPrice) : computedEditTotalPrice;
+    
+    const totalCost = editItems.reduce((sum, item) => {
+      const product = products.find(p => p.id === item.productId);
+      const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || 0;
+      const pairsPerCtn = product?.pairsPerCarton || 12;
+      const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
+      
+      if (item.sellType === 'carton') {
+        return sum + (item.cartonsQuantity * cartonBuying);
+      } else {
+        return sum + (item.pairsQuantity * singleBuying);
+      }
+    }, 0);
+
+    const updated: Sale = {
+      ...editingSale,
+      productId: editItems[0].productId,
+      productName: combinedName,
+      quantity: totalPairs,
+      totalPrice: finalPrice,
+      buyingPriceAtSale: totalPairs > 0 ? (totalCost / totalPairs) : editingSale.buyingPriceAtSale,
+      sellingPriceAtSale: totalPairs > 0 ? (finalPrice / totalPairs) : editingSale.sellingPriceAtSale,
+      items: editItems,
+      customerName: editCustomerName.trim(),
+      customerPhone: editCustomerPhone.trim(),
+      customerState: editCustomerState.trim(),
+      customerMunicipality: editCustomerMunicipality.trim(),
+      customerColis: editCustomerColis ? Number(editCustomerColis) : editingSale.customerColis
+    };
+
+    onUpdateSale(updated);
+    setEditingSale(null);
+  };
 
   // Filter products available for selling (quantity > 0 or searchable)
   const sellableProducts = useMemo(() => {
@@ -862,18 +1060,25 @@ export default function SalesManager({
 
                     <div className="flex gap-2">
                       <button 
+                        onClick={() => startEditingSale(sale)}
+                        className="flex-1 flex items-center justify-center gap-1 bg-amber-500/10 text-amber-400 font-bold text-xs py-2 rounded-xl border border-amber-500/20 hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        تعديل
+                      </button>
+                      <button 
                         onClick={() => onOpenReceiptModal(sale)}
-                        className="flex-1 flex items-center justify-center gap-1.5 bg-indigo-500/10 text-indigo-400 font-bold text-xs py-2.5 rounded-xl border border-indigo-500/20 hover:bg-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+                        className="flex-1 flex items-center justify-center gap-1 bg-indigo-500/10 text-indigo-400 font-bold text-xs py-2 rounded-xl border border-indigo-500/20 hover:bg-indigo-500/20 active:scale-95 transition-all cursor-pointer"
                       >
                         <Printer className="w-3.5 h-3.5" />
-                        طباعة الوصل
+                        الوصل
                       </button>
                       <button 
                         onClick={() => setSaleToDelete(sale)}
-                        className="flex-1 flex items-center justify-center gap-1.5 bg-rose-500/10 text-rose-400 font-bold text-xs py-2.5 rounded-xl border border-rose-500/20 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
+                        className="flex-1 flex items-center justify-center gap-1 bg-rose-500/10 text-rose-400 font-bold text-xs py-2 rounded-xl border border-rose-500/20 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        حذف البيع
+                        حذف
                       </button>
                     </div>
                   </div>
@@ -967,15 +1172,23 @@ export default function SalesManager({
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center gap-2">
                             <button 
+                              onClick={() => startEditingSale(sale)}
+                              className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors cursor-pointer"
+                              title="تعديل المبيعة"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              تعديل
+                            </button>
+                            <button 
                               onClick={() => onOpenReceiptModal(sale)}
-                              className="inline-flex items-center gap-1 bg-indigo-500/10 text-indigo-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 bg-indigo-500/10 text-indigo-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors cursor-pointer"
                             >
                               <Printer className="w-3.5 h-3.5" />
                               الوصل
                             </button>
                             <button 
                               onClick={() => setSaleToDelete(sale)}
-                              className="inline-flex items-center gap-1 bg-rose-500/10 text-rose-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 bg-rose-500/10 text-rose-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-colors cursor-pointer"
                               title="حذف عملية البيع"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1052,6 +1265,275 @@ export default function SalesManager({
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* Custom Edit Sale Modal */}
+      {editingSale && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto animate-fadeIn" dir="rtl">
+          <form 
+            onSubmit={handleSaveEditSale} 
+            className="bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-800 p-6 space-y-6 text-right max-h-[90vh] overflow-y-auto"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-indigo-400" />
+                <span>تعديل المبيعة والفاتورة: {editingSale.id.toUpperCase()}</span>
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setEditingSale(null)} 
+                className="text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Part 1: Customer Details */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide">1. معلومات الزبون والشحن</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/20 p-4 rounded-xl border border-slate-800/60">
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-bold mb-1">اسم الزبون</label>
+                  <input
+                    type="text"
+                    value={editCustomerName}
+                    onChange={(e) => setEditCustomerName(e.target.value)}
+                    placeholder="مثال: أحمد بوعلي"
+                    className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 text-right h-9"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-bold mb-1">رقم الهاتف</label>
+                  <input
+                    type="text"
+                    value={editCustomerPhone}
+                    onChange={(e) => setEditCustomerPhone(e.target.value)}
+                    placeholder="06XXXXXXXX"
+                    className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 text-left font-mono h-9"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-bold mb-1">الولاية</label>
+                  <input
+                    type="text"
+                    value={editCustomerState}
+                    onChange={(e) => setEditCustomerState(e.target.value)}
+                    placeholder="الولاية..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 text-right h-9"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-bold mb-1">البلدية</label>
+                  <input
+                    type="text"
+                    value={editCustomerMunicipality}
+                    onChange={(e) => setEditCustomerMunicipality(e.target.value)}
+                    placeholder="البلدية..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 text-right h-9"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 font-bold mb-1">عدد الكوليات (الطرود)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editCustomerColis}
+                    onChange={(e) => setEditCustomerColis(e.target.value)}
+                    placeholder="1"
+                    className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 text-center h-9"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Part 2: Sale Items List / Modification */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide flex items-center justify-between">
+                <span>2. المشتريات والسلع في المبيعة</span>
+                <span className="text-[10px] text-slate-400 font-normal">إجمالي السلع: {editItems.length}</span>
+              </h4>
+
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pl-1 pr-1">
+                {editItems.map((item, idx) => {
+                  const product = products.find(p => p.id === item.productId);
+                  const maxPairs = product ? product.quantity : 999;
+                  const pairsPerCtn = product?.pairsPerCarton || 12;
+
+                  return (
+                    <div 
+                      key={`${item.productId}-${idx}`}
+                      className="bg-slate-950/40 p-3 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-right"
+                    >
+                      {/* Product Name & SKU */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-200 truncate">{item.productName}</p>
+                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">SKU: {item.sku || 'N/A'}</p>
+                      </div>
+
+                      {/* Sell Type Selector (Carton vs Pair) */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => updateEditItemSellType(idx, 'carton')}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-lg transition-colors cursor-pointer ${
+                            item.sellType === 'carton'
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-slate-950 text-slate-400 border border-slate-800'
+                          }`}
+                        >
+                          كرتون
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateEditItemSellType(idx, 'pair')}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-lg transition-colors cursor-pointer ${
+                            item.sellType === 'pair'
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-slate-950 text-slate-400 border border-slate-800'
+                          }`}
+                        >
+                          بالزوج
+                        </button>
+                      </div>
+
+                      {/* Quantity & Unit Price */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {/* Qty incrementer */}
+                        <div className="flex items-center bg-slate-950 rounded-lg border border-slate-800 h-8">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentVal = item.sellType === 'carton' ? (item.cartonsQuantity || 1) : (item.pairsQuantity || 1);
+                              updateEditItemQty(idx, currentVal - 1);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-8 text-center text-xs font-bold text-slate-200">
+                            {item.sellType === 'carton' ? item.cartonsQuantity : item.pairsQuantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentVal = item.sellType === 'carton' ? (item.cartonsQuantity || 1) : (item.pairsQuantity || 1);
+                              updateEditItemQty(idx, currentVal + 1);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        {/* Price Input */}
+                        <div className="flex items-center bg-slate-950 rounded-lg border border-slate-800 h-8 px-2 w-28">
+                          <input
+                            type="number"
+                            value={item.sellingPriceAtSale}
+                            onChange={(e) => updateEditItemPrice(idx, Number(e.target.value))}
+                            className="w-full bg-transparent text-xs text-slate-200 font-bold text-center focus:outline-hidden"
+                            placeholder="السعر"
+                          />
+                          <span className="text-[8px] text-slate-500 font-bold shrink-0">د.ج</span>
+                        </div>
+                      </div>
+
+                      {/* Item Total Price & Delete Button */}
+                      <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 border-t md:border-t-0 border-slate-800 pt-2 md:pt-0">
+                        <div className="text-left md:text-right">
+                          <span className="text-[10px] text-slate-500 block">المجموع</span>
+                          <span className="text-xs font-black text-emerald-400">{formatCurrency(item.totalPrice)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => deleteEditItem(idx)}
+                          className="p-1.5 bg-rose-500/10 text-rose-400 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-all cursor-pointer"
+                          title="حذف المنتج من المبيعة"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Part 3: Add new product to Sale */}
+            <div className="space-y-2 relative">
+              <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide">3. إضافة منتج / سلعة أخرى إلى المبيعة</h4>
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+                <input
+                  type="text"
+                  value={editProductSearch}
+                  onChange={(e) => setEditProductSearch(e.target.value)}
+                  placeholder="ابحث هنا لإضافة موديل/منتج آخر لهذه الفاتورة..."
+                  className="w-full pr-9 pl-4 py-1.5 bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl h-9 text-slate-200 text-right"
+                />
+              </div>
+
+              {/* Suggestions dropdown */}
+              {editSearchableProducts.length > 0 && (
+                <div className="absolute z-60 left-0 right-0 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl max-h-[160px] overflow-y-auto mt-1 p-1 space-y-1">
+                  {editSearchableProducts.map(prod => (
+                    <button
+                      key={prod.id}
+                      type="button"
+                      onClick={() => addProductToEditItems(prod)}
+                      className="w-full text-right px-3 py-2 text-xs text-slate-300 hover:bg-indigo-600 hover:text-white rounded-lg transition-colors flex items-center justify-between cursor-pointer"
+                    >
+                      <div className="font-bold">{prod.name}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        SKU: {prod.sku} | المخزن: {prod.quantity} زوج
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Total price recalculator override */}
+            <div className="flex items-center justify-between border-t border-slate-800 pt-4 bg-slate-950/20 p-4 rounded-xl border border-slate-800/60">
+              <div>
+                <span className="text-xs font-bold text-slate-400">إجمالي مبلغ الفاتورة الإجمالي (د.ج)</span>
+                <p className="text-[10px] text-slate-500 mt-0.5">محسوب تلقائياً بناءً على سلة المبيعة</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={editTotalPrice}
+                  onChange={(e) => setEditTotalPrice(e.target.value)}
+                  className="w-36 bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-emerald-500/50 text-sm rounded-lg px-3 py-1.5 text-center font-black text-emerald-400"
+                />
+                <span className="text-xs text-slate-400 font-bold">د.ج</span>
+              </div>
+            </div>
+
+            {/* Actions Buttons */}
+            <div className="flex gap-3 pt-2">
+              <button 
+                type="button"
+                onClick={() => setEditingSale(null)}
+                className="flex-1 border border-slate-800 text-slate-400 font-bold text-xs py-2.5 rounded-xl hover:bg-slate-800 hover:text-slate-200 transition-colors h-10 cursor-pointer"
+              >
+                إلغاء التعديل
+              </button>
+              <button 
+                type="submit"
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs py-2.5 rounded-xl transition-all h-10 shadow-lg shadow-indigo-900/20 cursor-pointer"
+              >
+                حفظ تعديلات المبيعة 💾
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

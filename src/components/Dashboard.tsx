@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Product, Sale, formatCurrency } from '../types';
+import { Product, Sale, Expense, formatCurrency } from '../types';
 import { motion } from 'motion/react';
 import { 
   TrendingUp, 
@@ -23,6 +23,8 @@ const getLocalDateString = (date: Date): string => {
 interface DashboardProps {
   products: Product[];
   sales: Sale[];
+  expenses?: Expense[];
+  packagingPrice?: number;
   onNavigateToStock: () => void;
   onNavigateToSales: () => void;
   onViewReceipt: (sale: Sale) => void;
@@ -31,6 +33,8 @@ interface DashboardProps {
 export default function Dashboard({ 
   products, 
   sales, 
+  expenses = [],
+  packagingPrice = 100,
   onNavigateToStock, 
   onNavigateToSales,
   onViewReceipt 
@@ -52,8 +56,12 @@ export default function Dashboard({
     });
     const totalSalesToday = todaySales.reduce((acc, s) => acc + s.totalPrice, 0);
 
-    // Total actual profit (Revenue - Buying Cost) from sales history
+    // Total actual profit (Revenue - Buying Cost) from delivered sales history only (الربح عند التوصيل)
     const totalProfit = sales.reduce((acc, s) => {
+      if (s.status !== 'delivered') {
+        return acc;
+      }
+      
       if (s.items && s.items.length > 0) {
         const cost = s.items.reduce((sum, item) => {
           if (item.sellType === 'carton') {
@@ -75,6 +83,16 @@ export default function Dashboard({
       }
     }, 0);
 
+    // General expenses
+    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+    // Packaging cost based on user configured price
+    const totalParcels = sales.reduce((sum, s) => sum + (s.customerColis || 0), 0);
+    const totalPackagingCost = totalParcels * packagingPrice;
+
+    // Net Profit
+    const netProfit = totalProfit - totalExpenses - totalPackagingCost;
+
     // Low stock items (quantity < 5, but > 0)
     const lowStockCount = products.filter(p => p.quantity > 0 && p.quantity < 5).length;
     // Out of stock items (quantity === 0)
@@ -86,10 +104,13 @@ export default function Dashboard({
       totalSalesToday,
       todaySalesCount: todaySales.length,
       totalProfit,
+      netProfit,
+      totalExpenses,
+      totalPackagingCost,
       lowStockCount,
       outOfStockCount,
     };
-  }, [products, sales]);
+  }, [products, sales, expenses, packagingPrice]);
 
   // 2. Generate 7-day Sales Trend Data
   const weeklyTrend = useMemo(() => {
@@ -168,7 +189,7 @@ export default function Dashboard({
       </div>
 
       {/* Key Stats Bento Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         
         {/* Metric Card: Valeur du Stock */}
         <motion.div 
@@ -231,7 +252,32 @@ export default function Dashboard({
             <span className={`text-base sm:text-xl md:text-2xl font-extrabold block truncate ${metrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {formatCurrency(metrics.totalProfit)}
             </span>
-            <p className="text-[10px] sm:text-xs text-slate-400 mt-1 truncate">هوامش مبيعات متراكمة</p>
+            <p className="text-[10px] sm:text-xs text-slate-500 mt-1 truncate">عند التوصيل فقط 🚚</p>
+          </div>
+        </motion.div>
+
+        {/* Metric Card: Net Profit Card */}
+        <motion.div 
+          whileHover={{ y: -3 }}
+          className="bg-slate-900 p-3.5 sm:p-5 rounded-2xl border-2 border-indigo-500/50 shadow-indigo-900/10 shadow-2xl flex flex-col justify-between min-h-[115px] sm:min-h-[140px] relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 bg-indigo-500 text-[8px] sm:text-[9px] text-white font-black px-2 py-0.5 rounded-br-lg uppercase tracking-wider">
+            صافي الأرباح
+          </div>
+          <div className="flex items-center justify-between gap-1 mt-2">
+            <span className="text-[11px] sm:text-sm font-black text-indigo-400 truncate">صافي الأرباح</span>
+            <div className="p-1.5 sm:p-2 bg-indigo-500/20 rounded-lg text-indigo-300 font-black shrink-0">
+              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <span className={`text-base sm:text-lg md:text-xl font-black block truncate ${metrics.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {formatCurrency(metrics.netProfit)}
+            </span>
+            <div className="text-[9px] text-slate-400 mt-1 space-y-0.5 font-medium truncate">
+              <p>المصاريف: <span className="text-rose-400 font-bold">{formatCurrency(metrics.totalExpenses)}</span></p>
+              <p>التغليف: <span className="text-orange-400 font-bold">{formatCurrency(metrics.totalPackagingCost)}</span></p>
+            </div>
           </div>
         </motion.div>
 

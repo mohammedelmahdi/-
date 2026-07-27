@@ -25,6 +25,8 @@ interface ExpensesManagerProps {
   onDeletePackagingPayment: (id: string) => void;
   
   sales: Sale[];
+  packagingPrice: number;
+  onUpdatePackagingPrice: (price: number) => void;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -43,7 +45,9 @@ export default function ExpensesManager({
   packagingPayments,
   onAddPackagingPayment,
   onDeletePackagingPayment,
-  sales
+  sales,
+  packagingPrice,
+  onUpdatePackagingPrice
 }: ExpensesManagerProps) {
   // Expense Form state
   const [expenseTitle, setExpenseTitle] = useState('');
@@ -67,7 +71,7 @@ export default function ExpensesManager({
     return sales.reduce((sum, sale) => sum + (sale.customerColis || 0), 0);
   }, [sales]);
 
-  const packagingPricePerParcel = 100; // 100 DZD per parcel
+  const packagingPricePerParcel = packagingPrice; // specified by user
   
   const totalPackagingCost = totalParcelsPackaged * packagingPricePerParcel;
 
@@ -148,7 +152,7 @@ export default function ExpensesManager({
             <TrendingDown className="w-5 h-5 text-indigo-400" />
             <span>المصاريف وتكاليف التغليف</span>
           </h2>
-          <p className="text-xs text-slate-400">تابع جميع مصاريف متجرك، ومستحقات الشخص الذي يقوم بتغليف الطرود (100 د.ج للعلبة)</p>
+          <p className="text-xs text-slate-400">تابع جميع مصاريف متجرك، ومستحقات الشخص الذي يقوم بتغليف الطرود ({packagingPrice} د.ج للعلبة)</p>
         </div>
 
         {/* View Tabs Selector */}
@@ -404,13 +408,23 @@ export default function ExpensesManager({
               </button>
             </form>
 
-            <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1.5">
-              <p className="font-bold text-slate-300 flex items-center gap-1">
+            <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800 space-y-3">
+              <p className="font-bold text-slate-300 text-[11px] flex items-center gap-1">
                 <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
-                كيف يتم الحساب؟
+                تحديد سعر التغليف لكل طرد
               </p>
-              <p>
-                يقوم النظام تلقائياً بجمع عدد الكوليات (الطرود) المسجلة في المبيعات، ويضربها في تكلفة التغليف (100 د.ج للطرد) ليحسب التكلفة الكلية، ثم يطرح الدفعات المسجلة لمعرفة الباقي.
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={packagingPrice}
+                  onChange={(e) => onUpdatePackagingPrice(Number(e.target.value))}
+                  className="w-24 bg-slate-950 border border-slate-800 text-xs rounded-lg px-2.5 py-1 text-slate-200 text-center font-bold"
+                />
+                <span className="text-[11px] text-slate-400 font-bold">د.ج / طرد</span>
+              </div>
+              <p className="text-[10px] text-slate-500 leading-relaxed">
+                يقوم النظام تلقائياً بضرب عدد الكوليات (الطرود) في السعر المحدد أعلاه لحساب التكلفة الكلية للتغليف، ثم يطرح الدفعات المسجلة لمعرفة الباقي.
               </p>
             </div>
           </div>
@@ -436,7 +450,7 @@ export default function ExpensesManager({
                   <span>تكلفة التغليف الإجمالية</span>
                 </span>
                 <p className="text-xl font-black text-white">{formatCurrency(totalPackagingCost)}</p>
-                <p className="text-[9px] text-slate-500">معدل: 100 د.ج لكل طرد</p>
+                <p className="text-[9px] text-slate-500">معدل: {packagingPrice} د.ج لكل طرد</p>
               </div>
 
               {/* Stat 3: Remaining Balance */}
