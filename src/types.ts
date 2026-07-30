@@ -74,7 +74,7 @@ export interface PackagingPayment {
   notes?: string;      // ملاحظات إضافية
 }
 
-export type ViewType = 'dashboard' | 'stock' | 'sales' | 'expenses';
+export type ViewType = 'dashboard' | 'stock' | 'sales' | 'expenses' | 'stats';
 
 export const formatCurrency = (amount: number): string => {
   return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} د.ج`;

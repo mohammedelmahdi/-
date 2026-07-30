@@ -11,6 +11,7 @@ import StockManager from './components/StockManager';
 import SalesManager from './components/SalesManager';
 import ReceiptModal from './components/ReceiptModal';
 import ExpensesManager from './components/ExpensesManager';
+import StatsManager from './components/StatsManager';
 import { 
   LayoutDashboard, 
   Package, 
@@ -24,7 +25,8 @@ import {
   RefreshCw,
   ExternalLink,
   X,
-  TrendingDown
+  TrendingDown,
+  BarChart3
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { 
@@ -585,6 +587,19 @@ export default function App() {
               المصاريف والتغليف
             </button>
 
+            {/* Nav Link: Stats */}
+            <button
+              onClick={() => setCurrentView('stats')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                currentView === 'stats'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-900/30'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              الإحصائيات والمالية
+            </button>
+
           </nav>
         </div>
 
@@ -769,6 +784,15 @@ export default function App() {
           />
         )}
 
+        {currentView === 'stats' && (
+          <StatsManager 
+            products={products}
+            sales={sales}
+            expenses={expenses}
+            packagingPrice={packagingPrice}
+          />
+        )}
+
       </main>
 
       {/* 4. Sticky Bottom Mobile Navigation Bar */}
@@ -816,6 +840,17 @@ export default function App() {
         >
           <TrendingDown className={`w-5 h-5 ${currentView === 'expenses' ? 'scale-110' : ''}`} />
           <span className="text-[10px] font-bold mt-1">المصاريف</span>
+        </button>
+
+        {/* Tab Trigger: Stats */}
+        <button
+          onClick={() => setCurrentView('stats')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 cursor-pointer transition-all ${
+            currentView === 'stats' ? 'text-emerald-400' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <BarChart3 className={`w-5 h-5 ${currentView === 'stats' ? 'scale-110' : ''}`} />
+          <span className="text-[10px] font-bold mt-1">الإحصائيات</span>
         </button>
 
       </nav>
