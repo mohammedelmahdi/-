@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Product, Sale, Expense, PackagingPayment, formatCurrency, SaleStatus } from '../types';
+import { useState, useMemo, useEffect } from 'react';
+import { Product, Sale, Expense, formatCurrency } from '../types';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -16,13 +16,14 @@ import {
   CheckCircle2, 
   Truck, 
   RotateCcw,
-  Users,
   Award,
   BarChart3,
   Percent,
+  Coins,
+  ShieldAlert,
+  Save,
   HelpCircle
 } from 'lucide-react';
-import { motion } from 'motion/react';
 
 // Helper to get YYYY-MM-DD format in local timezone
 const getLocalDateString = (date: Date): string => {
@@ -36,7 +37,6 @@ interface StatsManagerProps {
   products: Product[];
   sales: Sale[];
   expenses: Expense[];
-  packagingPayments?: PackagingPayment[];
   packagingPrice: number;
 }
 
@@ -58,6 +58,25 @@ export default function StatsManager({
   
   // Interactive UI States
   const [hoveredChartBar, setHoveredChartBar] = useState<any | null>(null);
+
+  // Supplier Ledger State (stored in localStorage)
+  const [paidToSupplier, setPaidToSupplier] = useState<number>(() => {
+    const saved = localStorage.getItem('supplier_paid_amount');
+    return saved ? Number(saved) : 0;
+  });
+  const [showSupplierLedger, setShowSupplierLedger] = useState(true);
+  const [tempPaidInput, setTempPaidInput] = useState<string>(paidToSupplier.toString());
+
+  // Keep input in sync with state if state changes
+  useEffect(() => {
+    setTempPaidInput(paidToSupplier.toString());
+  }, [paidToSupplier]);
+
+  const saveSupplierPaidAmount = () => {
+    const amt = parseFloat(tempPaidInput) || 0;
+    setPaidToSupplier(amt);
+    localStorage.setItem('supplier_paid_amount', amt.toString());
+  };
 
   // Extract all unique Wilayas from sales for the dropdown filter
   const allWilayas = useMemo(() => {
@@ -118,7 +137,7 @@ export default function StatsManager({
         break;
     }
 
-    // Override with custom dates if custom is actively filled (preset isn't what defines it)
+    // Override with custom dates if custom is actively filled
     if (startDate) start = startDate;
     if (endDate) end = endDate;
 
@@ -180,6 +199,7 @@ export default function StatsManager({
     
     let deliveredRevenue = 0;
     let deliveredBuyingCost = 0;
+    let deliveredPairsCount = 0;
     
     let pendingRevenue = 0;
     let pendingBuyingCost = 0;
@@ -192,10 +212,13 @@ export default function StatsManager({
     let returnedBuyingCost = 0;
     
     let totalColisCount = 0;
+    let deliveredColisCount = 0;
+    let returnedColisCount = 0;
 
     filteredSales.forEach(sale => {
       const status = sale.status || 'pending';
-      totalColisCount += (sale.customerColis || 1);
+      const colis = sale.customerColis || 1;
+      totalColisCount += colis;
 
       // Extract quantities and costs
       let saleQty = sale.quantity;
@@ -225,6 +248,8 @@ export default function StatsManager({
       if (status === 'delivered') {
         deliveredRevenue += sale.totalPrice;
         deliveredBuyingCost += buyingCost;
+        deliveredPairsCount += saleQty;
+        deliveredColisCount += colis;
       } else if (status === 'pending') {
         pendingRevenue += sale.totalPrice;
         pendingBuyingCost += buyingCost;
@@ -235,6 +260,7 @@ export default function StatsManager({
         returnedCount++;
         returnedRevenue += sale.totalPrice;
         returnedBuyingCost += buyingCost;
+        returnedColisCount += colis;
       }
     });
 
@@ -243,6 +269,11 @@ export default function StatsManager({
 
     // Packaging cost based on filtered sales' parcels
     const totalPackagingCost = totalColisCount * packagingPrice;
+
+    // Sunk packaging and operational expenses from returned packages
+    // User: "السلع المسترجعة تعود له لاكن المصاريف تبقى علي"
+    // Packaging cost for returned parcels is a complete loss.
+    const returnedPackagingLoss = returnedColisCount * packagingPrice;
 
     // Gross profits
     const totalPotentialProfit = totalGrossRevenue - totalBuyingCost; // Profit if all are delivered
@@ -264,11 +295,15 @@ export default function StatsManager({
       totalBuyingCost,
       deliveredRevenue,
       deliveredBuyingCost,
+      deliveredPairsCount,
+      deliveredColisCount,
       pendingRevenue,
       shippedRevenue,
       returnedCount,
       returnedRevenue,
       returnedBuyingCost,
+      returnedColisCount,
+      returnedPackagingLoss,
       totalExpensesAmount,
       totalPackagingCost,
       totalPotentialProfit,
@@ -279,6 +314,78 @@ export default function StatsManager({
       totalSalesCount: filteredSales.length
     };
   }, [filteredSales, filteredExpenses, products, packagingPrice]);
+
+  // Breakdown of Delivered Items for Supplier Accounts Settle (تحاسب المورد)
+  const supplierDeliveredBreakdown = useMemo(() => {
+    const breakdownMap = new Map<string, {
+      id: string;
+      name: string;
+      sku: string;
+      cartonsDelivered: number;
+      pairsDelivered: number;
+      singleBuyingPrice: number;
+      cartonBuyingPrice: number;
+      totalBuyingCost: number;
+    }>();
+
+    filteredSales.forEach(sale => {
+      if (sale.status !== 'delivered') return;
+
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach(item => {
+          const product = products.find(p => p.id === item.productId);
+          const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || item.buyingPriceAtSale;
+          const pairsPerCtn = product?.pairsPerCarton || 12;
+          const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
+
+          const record = breakdownMap.get(item.productId) || {
+            id: item.productId,
+            name: item.productName,
+            sku: item.sku || 'N/A',
+            cartonsDelivered: 0,
+            pairsDelivered: 0,
+            singleBuyingPrice: singleBuying,
+            cartonBuyingPrice: cartonBuying,
+            totalBuyingCost: 0,
+          };
+
+          if (item.sellType === 'carton') {
+            record.cartonsDelivered += item.cartonsQuantity;
+            record.totalBuyingCost += item.cartonsQuantity * cartonBuying;
+          } else {
+            record.pairsDelivered += item.pairsQuantity;
+            record.totalBuyingCost += item.pairsQuantity * singleBuying;
+          }
+
+          breakdownMap.set(item.productId, record);
+        });
+      } else {
+        // Flat structure fallback
+        const product = products.find(p => p.id === sale.productId);
+        const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || sale.buyingPriceAtSale;
+        const pairsPerCtn = product?.pairsPerCarton || 12;
+        const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
+
+        const record = breakdownMap.get(sale.productId) || {
+          id: sale.productId,
+          name: sale.productName,
+          sku: 'N/A',
+          cartonsDelivered: 0,
+          pairsDelivered: 0,
+          singleBuyingPrice: singleBuying,
+          cartonBuyingPrice: cartonBuying,
+          totalBuyingCost: 0,
+        };
+
+        record.pairsDelivered += sale.quantity;
+        record.totalBuyingCost += sale.quantity * singleBuying;
+
+        breakdownMap.set(sale.productId, record);
+      }
+    });
+
+    return Array.from(breakdownMap.values());
+  }, [filteredSales, products]);
 
   // Top Selling Products breakdown
   const topProducts = useMemo(() => {
@@ -293,8 +400,6 @@ export default function StatsManager({
     }>();
 
     filteredSales.forEach(sale => {
-      const isDelivered = (sale.status === 'delivered');
-      
       if (sale.items && sale.items.length > 0) {
         sale.items.forEach(item => {
           const prodId = item.productId;
@@ -399,6 +504,52 @@ export default function StatsManager({
       .slice(0, 6);
   }, [filteredSales]);
 
+  // Top Returning Wilayas (ترتيب الولايات الأكثر إرجاعاً للسلع)
+  const topReturningWilayas = useMemo(() => {
+    const statsMap = new Map<string, {
+      wilaya: string;
+      totalSales: number;
+      returnedSales: number;
+      returnedColis: number;
+      lostPackagingCost: number;
+      returnRate: number;
+    }>();
+
+    filteredSales.forEach(sale => {
+      const state = sale.customerState?.trim() || 'غير محدد';
+      const status = sale.status || 'pending';
+      const colis = sale.customerColis || 1;
+
+      const stat = statsMap.get(state) || {
+        wilaya: state,
+        totalSales: 0,
+        returnedSales: 0,
+        returnedColis: 0,
+        lostPackagingCost: 0,
+        returnRate: 0
+      };
+
+      stat.totalSales += 1;
+      if (status === 'returned') {
+        stat.returnedSales += 1;
+        stat.returnedColis += colis;
+        stat.lostPackagingCost += colis * packagingPrice;
+      }
+
+      statsMap.set(state, stat);
+    });
+
+    return Array.from(statsMap.values())
+      .map(w => ({
+        ...w,
+        returnRate: w.totalSales > 0 ? Math.round((w.returnedSales / w.totalSales) * 100) : 0
+      }))
+      // Filter only states that have at least 1 return
+      .filter(w => w.returnedSales > 0)
+      // Sort by returnedSales descending (highest returns first)
+      .sort((a, b) => b.returnedSales - a.returnedSales || b.returnRate - a.returnRate);
+  }, [filteredSales, packagingPrice]);
+
   // Daily Sales trend chart calculator (tracks revenue & profits daily over range)
   const chartDailyTrend = useMemo(() => {
     const dailyMap = new Map<string, {
@@ -408,7 +559,6 @@ export default function StatsManager({
       salesCount: number;
     }>();
 
-    // Fill daily keys depending on the filtered sales dates to ensure sorting
     filteredSales.forEach(sale => {
       const dayStr = sale.date.split('T')[0]; // YYYY-MM-DD
       const stat = dailyMap.get(dayStr) || {
@@ -440,17 +590,13 @@ export default function StatsManager({
         buyingCost = sale.buyingPriceAtSale * sale.quantity;
       }
 
-      // We only count product profit if it's delivered, or potential profit? 
-      // Let's track potential daily profit to show general business performance.
       stat.profit += (sale.totalPrice - buyingCost);
       dailyMap.set(dayStr, stat);
     });
 
-    // Sort days chronologically
     const sortedDays = Array.from(dailyMap.values())
       .sort((a, b) => a.dateLabel.localeCompare(b.dateLabel));
 
-    // For better visual, if it's empty, mock one day or leave empty
     return sortedDays;
   }, [filteredSales, products]);
 
@@ -465,7 +611,7 @@ export default function StatsManager({
   };
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6 animate-fade-in text-right" dir="rtl">
       
       {/* 1. Header with Reset Filters Button */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
@@ -474,7 +620,7 @@ export default function StatsManager({
             <BarChart3 className="w-6 h-6 text-indigo-400" />
             <span>مركز الإحصائيات والتحليل المالي</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">تتبع التدفقات المالية للمبيعات، الأرباح، المصاريف، ونسب التوصيل لمتجرك بدقة.</p>
+          <p className="text-xs text-slate-400 mt-1">تتبع التدفقات المالية للمبيعات، حسابات الموردين، خسائر المرتجعات، والنسب الجغرافية بدقة.</p>
         </div>
         
         {/* Quick Reset Button if filters are active */}
@@ -493,7 +639,7 @@ export default function StatsManager({
       <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl shadow-xl space-y-4">
         <div className="flex items-center gap-2 text-indigo-400 pb-2 border-b border-slate-800">
           <Filter className="w-4 h-4" />
-          <span className="text-xs font-extrabold uppercase tracking-wider">تصفية وفلترة البيانات</span>
+          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">فلترة البيانات والتقارير المخصصة</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -506,7 +652,6 @@ export default function StatsManager({
                 value={datePreset}
                 onChange={(e) => {
                   setDatePreset(e.target.value as DatePreset);
-                  // Reset custom dates if switching presets
                   setStartDate('');
                   setEndDate('');
                 }}
@@ -526,7 +671,7 @@ export default function StatsManager({
 
           {/* Status Filter */}
           <div>
-            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">حالة الطلبية / المبيعة</label>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">حالة الطلبية</label>
             <div className="relative">
               <select
                 value={statusFilter}
@@ -545,7 +690,7 @@ export default function StatsManager({
 
           {/* Wilaya Filter */}
           <div>
-            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">الولاية (موقع الزبون)</label>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">الولاية</label>
             <div className="relative">
               <select
                 value={wilayaFilter}
@@ -563,7 +708,7 @@ export default function StatsManager({
 
           {/* Product Filter */}
           <div>
-            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">تصفية حسب موديل المنتج</label>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">موديل المنتج</label>
             <div className="relative">
               <select
                 value={productFilter}
@@ -584,14 +729,14 @@ export default function StatsManager({
         {/* Custom Start/End Date Pickers */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800/50">
           <div>
-            <label className="block text-[10px] text-slate-400 font-bold mb-1">من تاريخ (بداية الفترة المخصصة)</label>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1">من تاريخ</label>
             <div className="relative">
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => {
                   setStartDate(e.target.value);
-                  setDatePreset('all'); // custom overrides preset
+                  setDatePreset('all');
                 }}
                 className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-200 outline-hidden h-10 text-right font-mono"
               />
@@ -600,14 +745,14 @@ export default function StatsManager({
           </div>
 
           <div>
-            <label className="block text-[10px] text-slate-400 font-bold mb-1">إلى تاريخ (نهاية الفترة المخصصة)</label>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1">إلى تاريخ</label>
             <div className="relative">
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => {
                   setEndDate(e.target.value);
-                  setDatePreset('all'); // custom overrides preset
+                  setDatePreset('all');
                 }}
                 className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-200 outline-hidden h-10 text-right font-mono"
               />
@@ -617,168 +762,248 @@ export default function StatsManager({
         </div>
       </div>
 
-      {/* 3. Key Financials Bento Grid (صناديق المال والأرباح) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 3. Deep-Dive Delivered & Returns Financials (الطرود المسلمة و المرتجعات) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* Metric 1: Total Gross Sales (الرقم الإجمالي) */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between shadow-xl min-h-[130px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400">إجمالي المبيعات (الكل)</span>
-            <div className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg">
-              <ShoppingCart className="w-4 h-4" />
+        {/* Card A: الطرود المستلمة وتفصيل أرباحها الحقيقية */}
+        <div className="bg-gradient-to-br from-slate-900 to-emerald-950/15 p-5 rounded-2xl border border-emerald-500/20 shadow-xl flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <span>الطرود المسلّمة والمدخول الحقيقي</span>
+              </h3>
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                {financialMetrics.deliveredColisCount} طرود مستلمة
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-bold">قيمة السلع المستلمة (البيع):</span>
+                <span className="text-sm font-black text-slate-100">{formatCurrency(financialMetrics.deliveredRevenue)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-bold">رأس مال السلع (للمورد):</span>
+                <span className="text-sm font-extrabold text-slate-300">{formatCurrency(financialMetrics.deliveredBuyingCost)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                <span className="text-xs text-emerald-400 font-black">أرباح المنتجات الموصلة:</span>
+                <span className="text-base font-black text-emerald-400">
+                  {formatCurrency(financialMetrics.deliveredRevenue - financialMetrics.deliveredBuyingCost)}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="mt-2">
-            <span className="text-xl sm:text-2xl font-black text-slate-100 block">
-              {formatCurrency(financialMetrics.totalGrossRevenue)}
-            </span>
-            <span className="text-[10px] text-slate-500 mt-1 block font-bold">
-              مجموع مبيعات {financialMetrics.totalSalesCount} طلبيات مباعة
-            </span>
-          </div>
+          <p className="text-[10px] text-slate-400 mt-4 leading-relaxed">
+            * هذه الأرباح تمثل الفرق بين سعر البيع وتكلفة شراء البضائع للطرود التي وصلت وتم تسليمها للزبون بالفعل.
+          </p>
         </div>
 
-        {/* Metric 2: Delivered Cash vs Shipped (المال المحصل وتحت التوصيل) */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between shadow-xl min-h-[130px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400">السيولة المستلمة والجارية</span>
-            <div className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg">
-              <DollarSign className="w-4 h-4" />
+        {/* Card B: الطرود المسترجعة وخسائرها (السلع للمورد والمصاريف علي) */}
+        <div className="bg-gradient-to-br from-slate-900 to-rose-950/15 p-5 rounded-2xl border border-rose-500/20 shadow-xl flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-rose-400" />
+                <span>المرتجعات (السلع للمورد والمصاريف علي)</span>
+              </h3>
+              <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-md">
+                {financialMetrics.returnedCount} مسترجع
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-bold">قيمة البضائع المسترجعة:</span>
+                <span className="text-sm font-extrabold text-slate-300">{formatCurrency(financialMetrics.returnedBuyingCost)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-bold">عدد الكوليات المسترجعة:</span>
+                <span className="text-sm font-black text-slate-200">{financialMetrics.returnedColisCount} طرد</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 text-rose-400">
+                <span className="text-xs font-black">خسائر التغليف والتوصيل المهدرة:</span>
+                <span className="text-base font-black">
+                  -{formatCurrency(financialMetrics.returnedPackagingLoss)}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="mt-2 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-emerald-400 font-bold">المستلمة (توصيل):</span>
-              <span className="text-xs font-extrabold text-emerald-400">
-                {formatCurrency(financialMetrics.deliveredRevenue)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-indigo-400 font-bold">في الطريق (شحن):</span>
-              <span className="text-xs font-extrabold text-indigo-400">
-                {formatCurrency(financialMetrics.shippedRevenue)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
-              <span className="text-[9px] text-amber-500 font-bold">المعلقة:</span>
-              <span className="text-xs font-extrabold text-amber-500">
-                {formatCurrency(financialMetrics.pendingRevenue)}
-              </span>
-            </div>
-          </div>
+          <p className="text-[10px] text-rose-300 mt-4 leading-relaxed bg-rose-950/20 p-2.5 rounded-xl border border-rose-900/30">
+            💡 <strong>ملاحظة هامة:</strong> البضاعة المسترجعة لا نخسر قيمتها لأنها تعود للمورد مجاناً، لكننا نتحمل خسارة التغليف والتوصيل للمرتجعات.
+          </p>
         </div>
 
-        {/* Metric 3: Total Costs & Expenses (المصاريف والتغليف والسلع) */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between shadow-xl min-h-[130px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400">التكاليف والمصاريف</span>
-            <div className="p-1.5 bg-rose-500/10 text-rose-400 rounded-lg">
-              <TrendingDown className="w-4 h-4" />
+        {/* Card C: المتبقي في الجيب (صافي الأرباح الكلي) */}
+        <div className="bg-gradient-to-br from-slate-900 to-indigo-950/30 p-5 rounded-2xl border border-indigo-500/40 shadow-xl flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-indigo-950">
+              <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                <Coins className="w-5 h-5 text-indigo-400" />
+                <span>الأرباح الصافية الحقيقية (المتبقي في جيبك)</span>
+              </h3>
+              <span className="text-xs font-black text-indigo-400">مجموع كل شيء</span>
             </div>
-          </div>
-          <div className="mt-2 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-rose-400 font-bold">شراء البضاعة:</span>
-              <span className="text-xs font-extrabold text-rose-300">
-                {formatCurrency(financialMetrics.totalBuyingCost)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-rose-400 font-bold">المصاريف العامة:</span>
-              <span className="text-xs font-extrabold text-rose-300">
-                {formatCurrency(financialMetrics.totalExpensesAmount)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
-              <span className="text-[9px] text-slate-400 font-bold">تكلفة التغليف ({financialMetrics.totalColisCount} طرد):</span>
-              <span className="text-xs font-extrabold text-slate-300">
-                {formatCurrency(financialMetrics.totalPackagingCost)}
-              </span>
-            </div>
-          </div>
-        </div>
 
-        {/* Metric 4: Net Real Pocket Profit (الأرباح الصافية الحقيقية) */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-indigo-500/40 bg-gradient-to-br from-slate-900 to-indigo-950/20 flex flex-col justify-between shadow-xl min-h-[130px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-indigo-300">صافي الأرباح الحقيقية 💰</span>
-            <div className="p-1.5 bg-indigo-500/20 text-indigo-300 rounded-lg">
-              <TrendingUp className="w-4 h-4" />
+            <div className="mt-4 space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">أرباح المنتجات الموصلة:</span>
+                <span className="text-slate-200 font-bold">+{formatCurrency(financialMetrics.deliveredRevenue - financialMetrics.deliveredBuyingCost)}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">إجمالي المصاريف التشغيلية:</span>
+                <span className="text-slate-200 font-bold">-{formatCurrency(financialMetrics.totalExpensesAmount)}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">إجمالي تكاليف التغليف (كل الطرود):</span>
+                <span className="text-slate-200 font-bold">-{formatCurrency(financialMetrics.totalPackagingCost)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2.5 border-t border-slate-800/60">
+                <span className="text-xs text-emerald-400 font-extrabold">الربح الصافي الحقيقي للنشاط:</span>
+                <span className="text-lg font-black text-emerald-400">
+                  {formatCurrency(financialMetrics.netProfit)}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="mt-2">
-            <span className="text-2xl font-black text-emerald-400 block tracking-tight">
-              {formatCurrency(financialMetrics.netProfit)}
-            </span>
-            <p className="text-[10px] text-slate-400 leading-relaxed mt-1">
-              أرباح السلع الموصلة مطروحاً منها التغليف والمصاريف العامة.
-            </p>
+          <div className="mt-4 pt-2 border-t border-slate-800/40 flex items-center gap-1 text-[10px] text-indigo-300">
+            <span>الصافي = (أرباح التوصيل - المصاريف - تغليف الكل)</span>
           </div>
         </div>
 
       </div>
 
-      {/* 4. Second Stats row (Returned losses and Delivery Rates) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* 4. Supplier Ledger Section (تتبع حساب المورد وتسوية السلع الموصلة والمسترجعة) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
         
-        {/* Delivery Success Rate */}
-        <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex items-center justify-between shadow-lg">
+        {/* Toggleable header */}
+        <div 
+          onClick={() => setShowSupplierLedger(!showSupplierLedger)}
+          className="bg-slate-950 p-5 border-b border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-950/80 transition-all"
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl">
-              <Percent className="w-5 h-5" />
+            <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">
+              <Coins className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs text-slate-400 font-bold block">معدل نجاح التوصيل</span>
-              <span className="text-lg font-black text-emerald-400">{financialMetrics.deliveryRate}%</span>
+              <h3 className="text-sm font-black text-slate-100">🤝 كشف حساب المورد وتسوية السلع (Delivered Supplier Ledger)</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">احسب قيمة السلع المستلمة لتتحاسب مع المورد، وتتبع المبالغ المدفوعة والمتبقية له.</p>
             </div>
           </div>
-          <div className="w-16 h-16 relative flex items-center justify-center shrink-0">
-            {/* simple circular progress indicator using svg */}
-            <svg className="w-full h-full transform -rotate-90">
-              <circle cx="32" cy="32" r="26" stroke="#1e293b" strokeWidth="6" fill="transparent" />
-              <circle cx="32" cy="32" r="26" stroke="#10b981" strokeWidth="6" fill="transparent" 
-                strokeDasharray={2 * Math.PI * 26}
-                strokeDashoffset={2 * Math.PI * 26 * (1 - financialMetrics.deliveryRate / 100)}
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="absolute text-[10px] font-black text-slate-100">{financialMetrics.deliveryRate}%</span>
-          </div>
+          <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${showSupplierLedger ? 'rotate-180' : ''}`} />
         </div>
 
-        {/* Money Pending in Shipped */}
-        <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex items-center gap-3 shadow-lg">
-          <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-xl">
-            <Truck className="w-5 h-5 animate-pulse" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-400 font-bold block">أموال في الطريق (مباعة تشحن حالياً)</span>
-            <span className="text-lg font-black text-amber-400">
-              {formatCurrency(financialMetrics.shippedRevenue)}
-            </span>
-            <span className="text-[9px] text-slate-500 block mt-0.5">سيولة مؤجلة لحين تأكيد التوصيل</span>
-          </div>
-        </div>
+        {showSupplierLedger && (
+          <div className="p-5 space-y-6">
+            
+            {/* Payment status & Balance calculator */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-950/60 p-5 rounded-2xl border border-slate-800/60">
+              
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold mb-1">1. إجمالي ما يستحقه المورد (ثمن البضاعة الموصلة):</span>
+                <span className="text-base font-black text-slate-100">{formatCurrency(financialMetrics.deliveredBuyingCost)}</span>
+                <span className="block text-[9px] text-emerald-400 mt-1 font-bold">
+                  ({financialMetrics.deliveredPairsCount} قطعة تم بيعها وتوصيلها)
+                </span>
+              </div>
 
-        {/* Returns & associated capital locked or lost */}
-        <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex items-center gap-3 shadow-lg">
-          <div className="p-2.5 bg-rose-500/10 text-rose-400 rounded-xl">
-            <RotateCcw className="w-5 h-5" />
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold mb-1">2. قيمة السلع المسترجعة (لا تدفع ثمنها):</span>
+                <span className="text-base font-black text-rose-400">{formatCurrency(financialMetrics.returnedBuyingCost)}</span>
+                <span className="block text-[9px] text-rose-300 mt-1">عادت لمخزن المورد (معفاة)</span>
+              </div>
+
+              {/* Input for Paid Amount */}
+              <div className="md:col-span-1">
+                <label className="block text-[10px] text-slate-400 font-bold mb-1">3. المبلغ المدفوع للمورد حالياً:</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={tempPaidInput}
+                    onChange={(e) => setTempPaidInput(e.target.value)}
+                    placeholder="مثال: 50000"
+                    className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-1 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-left font-mono h-9"
+                  />
+                  <button
+                    onClick={saveSupplierPaidAmount}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg px-3 py-1 flex items-center justify-center text-xs font-bold transition-all shrink-0 cursor-pointer h-9"
+                    title="حفظ المبلغ المدفوع"
+                  >
+                    <Save className="w-4 h-4" />
+                  </button>
+                </div>
+                <span className="block text-[9px] text-slate-500 mt-1">سيتم حفظ المبلغ في متصفحك</span>
+              </div>
+
+              <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col justify-center">
+                <span className="block text-[10px] text-slate-400 font-bold">4. المستحقات المتبقية للمورد:</span>
+                <span className={`text-lg font-black mt-1 block ${
+                  (financialMetrics.deliveredBuyingCost - paidToSupplier) > 0 ? 'text-amber-500' : 'text-emerald-400'
+                }`}>
+                  {formatCurrency(Math.max(0, financialMetrics.deliveredBuyingCost - paidToSupplier))}
+                </span>
+                <span className="block text-[9px] text-slate-500 mt-0.5">الباقي = (تكلفة المستلمة - المدفوع)</span>
+              </div>
+
+            </div>
+
+            {/* List of Delivered Items for easy calculation / settlement */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black text-slate-300 flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-indigo-400" />
+                <span>قائمة السلع الموصلة للتسوية والمحاسبة الفردية:</span>
+              </h4>
+
+              {supplierDeliveredBreakdown.length === 0 ? (
+                <div className="text-center py-6 text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+                  لا توجد سلع موصلة في هذه الفترة المحددة للتسوية والمحاسبة مع المورد.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+                  <table className="w-full text-right border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
+                        <th className="p-3">اسم المنتج والموديل</th>
+                        <th className="p-3 text-center">الكمية المسلمة (كرتون)</th>
+                        <th className="p-3 text-center">الكمية المسلمة (أزواج/فردي)</th>
+                        <th className="p-3 text-left">سعر الشراء الفردي</th>
+                        <th className="p-3 text-left">إجمالي مستحق المورد</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50 bg-slate-950/20">
+                      {supplierDeliveredBreakdown.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-900/40 text-slate-300">
+                          <td className="p-3 font-bold">
+                            <span className="text-slate-200">{item.name}</span>
+                            <span className="block text-[10px] text-slate-500 font-mono mt-0.5">SKU: {item.sku}</span>
+                          </td>
+                          <td className="p-3 text-center text-slate-400 font-mono">
+                            {item.cartonsDelivered > 0 ? `${item.cartonsDelivered} كرتون` : '0'}
+                          </td>
+                          <td className="p-3 text-center font-mono">
+                            {item.pairsDelivered > 0 ? `${item.pairsDelivered} زوج` : '0'}
+                          </td>
+                          <td className="p-3 text-left font-mono text-slate-400">
+                            {formatCurrency(item.singleBuyingPrice)}
+                          </td>
+                          <td className="p-3 text-left font-black text-emerald-400 font-mono">
+                            {formatCurrency(item.totalBuyingCost)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
           </div>
-          <div>
-            <span className="text-xs text-slate-400 font-bold block">الطلبيات المسترجعة والخسائر</span>
-            <span className="text-lg font-black text-rose-400">
-              {financialMetrics.returnedCount} طلبيات مسترجعة
-            </span>
-            <span className="text-[9px] text-rose-300 block mt-0.5">
-              رأس مال بضائع مجمد: {formatCurrency(financialMetrics.returnedBuyingCost)}
-            </span>
-          </div>
-        </div>
+        )}
 
       </div>
 
-      {/* 5. Custom High-Fidelity SVG Interactive Chart (الرسم البياني للمبيعات والأرباح اليومية) */}
+      {/* 5. SVG Interactive Trend Chart */}
       <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
           <div>
@@ -805,10 +1030,8 @@ export default function StatsManager({
           </div>
         ) : (
           <div className="relative">
-            {/* Custom Interactive SVG Graph */}
             <div className="h-64 w-full bg-slate-950/30 rounded-xl p-4 flex items-end relative overflow-hidden">
               
-              {/* Chart Grid Lines */}
               <div className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none">
                 <div className="w-full border-t border-slate-800/40"></div>
                 <div className="w-full border-t border-slate-800/40"></div>
@@ -817,12 +1040,10 @@ export default function StatsManager({
                 <div className="w-full border-t border-slate-800/40"></div>
               </div>
 
-              {/* Chart Bars */}
               <div className="w-full h-full flex items-end justify-around gap-2 z-10 pt-6 pb-2">
-                {chartDailyTrend.map((day, index) => {
-                  // Calculate heights based on maximum amount
+                {chartDailyTrend.map((day) => {
                   const maxAmt = Math.max(...chartDailyTrend.map(d => d.revenue), 100);
-                  const revHeight = (day.revenue / maxAmt) * 85; // Max 85% height
+                  const revHeight = (day.revenue / maxAmt) * 85;
                   const profitHeight = (day.profit / maxAmt) * 85;
 
                   const isHovered = hoveredChartBar && hoveredChartBar.dateLabel === day.dateLabel;
@@ -834,7 +1055,6 @@ export default function StatsManager({
                       onMouseEnter={() => setHoveredChartBar(day)}
                       onMouseLeave={() => setHoveredChartBar(null)}
                     >
-                      {/* Bars overlay/container */}
                       <div className="w-full max-w-[40px] h-[180px] flex items-end justify-center gap-1 relative">
                         
                         {/* Revenue Bar (Indigo) */}
@@ -855,16 +1075,14 @@ export default function StatsManager({
 
                       </div>
 
-                      {/* X-Axis Date label */}
                       <span className="text-[9px] text-slate-500 mt-2 font-mono truncate max-w-[60px] text-center block">
-                        {day.dateLabel.substring(5)} {/* MM-DD */}
+                        {day.dateLabel.substring(5)}
                       </span>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Hover Tooltip Overlay */}
               {hoveredChartBar && (
                 <div 
                   className="absolute z-20 bg-slate-900 border border-slate-700/80 p-3 rounded-xl shadow-2xl text-right text-xs space-y-1.5 transition-all duration-200"
@@ -926,7 +1144,6 @@ export default function StatsManager({
                   className="bg-slate-950/40 p-3 rounded-xl border border-slate-800/60 flex items-center justify-between gap-4 text-right"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    {/* Rank Number Badge */}
                     <span className="w-6 h-6 rounded-lg bg-indigo-600/10 text-indigo-400 flex items-center justify-center text-xs font-black shrink-0">
                       {idx + 1}
                     </span>
@@ -956,7 +1173,7 @@ export default function StatsManager({
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
               <MapPin className="w-5 h-5 text-indigo-400" />
-              <span>المبيعات والشحن حسب الولايات الجزائرية</span>
+              <span>أداء الشحن والتوصيل حسب الولايات الجزائرية</span>
             </h3>
             <span className="text-[10px] text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg">توزيع جغرافي</span>
           </div>
@@ -971,7 +1188,7 @@ export default function StatsManager({
                 const totalFinished = w.delivered + w.returned;
                 const deliverySuccessRate = totalFinished > 0 
                   ? Math.round((w.delivered / totalFinished) * 100) 
-                  : 100; // default to 100 if none finished
+                  : 100;
 
                 return (
                   <div 
@@ -992,7 +1209,6 @@ export default function StatsManager({
                       </div>
                     </div>
 
-                    {/* Delivery Rate for the state */}
                     <div className="flex items-center gap-3 justify-between sm:justify-end border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0 shrink-0">
                       <div className="text-right sm:text-left">
                         <span className="text-[10px] text-slate-500 block">إجمالي المداخيل</span>
@@ -1017,6 +1233,63 @@ export default function StatsManager({
           )}
         </div>
 
+      </div>
+
+      {/* 7. Top Returning States / Wilayas (الولايات الأكثر إرجاعاً للسلع) */}
+      <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-rose-400" />
+            <div>
+              <h3 className="text-sm font-black text-slate-100">⚠️ ترتيب الولايات الأكثر إرجاعاً للسلع (Top Returning Wilayas)</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">الولايات ذات أعلى معدلات مسترجعات لمساعدتك في اتخاذ قرارات الشحن بحذر.</p>
+            </div>
+          </div>
+          <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg font-bold">الأكثر خسارة للتغليف</span>
+        </div>
+
+        {topReturningWilayas.length === 0 ? (
+          <div className="py-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl bg-slate-950/10">
+            🎉 رائع! لا توجد ولايات بها طلبيات مسترجعة حالياً خلال هذه الفترة.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {topReturningWilayas.map((w, idx) => (
+              <div 
+                key={w.wilaya}
+                className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center text-xs font-black shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <span className="text-xs font-black text-slate-200 block">{w.wilaya}</span>
+                      <span className="text-[9px] text-slate-500">إجمالي الطلبات بالولاية: {w.totalSales}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Return rate percentage badge */}
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400">
+                    معدل الارتجاع: {w.returnRate}%
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/40 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] text-slate-500 block">المسترجعات</span>
+                    <span className="text-xs font-bold text-slate-300">{w.returnedSales} طلبيات ({w.returnedColis} طرود)</span>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-[9px] text-rose-400 block font-bold">خسائر التغليف والتوصيل</span>
+                    <span className="text-xs font-black text-rose-400">{formatCurrency(w.lostPackagingCost)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
     </div>
