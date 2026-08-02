@@ -13,7 +13,9 @@ import {
   X,
   Trash2,
   AlertCircle,
-  Edit2
+  Edit2,
+  Filter,
+  MapPin
 } from 'lucide-react';
 
 interface SalesManagerProps {
@@ -58,6 +60,28 @@ export default function SalesManager({
 
   // Search History State
   const [historySearch, setHistorySearch] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('all');
+  const [historyStateFilter, setHistoryStateFilter] = useState('all');
+  const [historyDateFilter, setHistoryDateFilter] = useState('all');
+
+  // Helper to get YYYY-MM-DD format in local timezone
+  const getLocalDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Extract all unique Wilayas from sales for the history filter
+  const historyWilayas = useMemo(() => {
+    const list = new Set<string>();
+    sales.forEach(s => {
+      if (s.customerState?.trim()) {
+        list.add(s.customerState.trim());
+      }
+    });
+    return Array.from(list).sort();
+  }, [sales]);
 
   // Customer Information States for New Sale
   const [customerName, setCustomerName] = useState('');
@@ -529,14 +553,60 @@ export default function SalesManager({
 
   // 5. Filter Sales History list
   const filteredSalesHistory = useMemo(() => {
-    const list = [...sales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    if (!historySearch.trim()) return list;
+    let list = [...sales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
-    return list.filter(s => 
-      s.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
-      s.id.toLowerCase().includes(historySearch.toLowerCase())
-    );
-  }, [sales, historySearch]);
+    // Status Filter
+    if (historyStatusFilter !== 'all') {
+      list = list.filter(s => (s.status || 'pending') === historyStatusFilter);
+    }
+
+    // State (Wilaya) Filter
+    if (historyStateFilter !== 'all') {
+      list = list.filter(s => s.customerState?.trim() === historyStateFilter.trim());
+    }
+
+    // Date Filter
+    if (historyDateFilter !== 'all') {
+      const now = new Date();
+      const todayStr = getLocalDateString(now);
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yesterdayStr = getLocalDateString(yesterday);
+
+      list = list.filter(s => {
+        const saleDateStr = s.date.split('T')[0];
+        if (historyDateFilter === 'today') {
+          return saleDateStr === todayStr;
+        } else if (historyDateFilter === 'yesterday') {
+          return saleDateStr === yesterdayStr;
+        } else if (historyDateFilter === 'week') {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(now.getDate() - 7);
+          const sevenDaysAgoStr = getLocalDateString(sevenDaysAgo);
+          return saleDateStr >= sevenDaysAgoStr && saleDateStr <= todayStr;
+        } else if (historyDateFilter === 'month') {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(now.getDate() - 30);
+          const thirtyDaysAgoStr = getLocalDateString(thirtyDaysAgo);
+          return saleDateStr >= thirtyDaysAgoStr && saleDateStr <= todayStr;
+        }
+        return true;
+      });
+    }
+
+    // Text Search
+    if (historySearch.trim()) {
+      const searchLower = historySearch.toLowerCase().trim();
+      list = list.filter(s => 
+        s.productName.toLowerCase().includes(searchLower) || 
+        s.id.toLowerCase().includes(searchLower) ||
+        s.customerName?.toLowerCase().includes(searchLower) ||
+        s.customerPhone?.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    return list;
+  }, [sales, historySearch, historyStatusFilter, historyStateFilter, historyDateFilter]);
 
   return (
     <div id="sales-section" className="space-y-6 text-right" dir="rtl">
@@ -960,24 +1030,87 @@ export default function SalesManager({
         <div className="space-y-4">
           
           {/* History Filters & Search */}
-          <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input 
-                type="text" 
-                placeholder="ابحث عن طريق اسم المنتج أو معرف الفاتورة..."
-                value={historySearch}
-                onChange={(e) => setHistorySearch(e.target.value)}
-                className="w-full pr-11 pl-4 py-2.5 bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm rounded-xl h-12 text-slate-200 placeholder-slate-500 text-right font-sans"
-              />
-              {historySearch && (
-                <button 
-                  onClick={() => setHistorySearch('')}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+          <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <input 
+                  type="text" 
+                  placeholder="ابحث بالمنتج، اسم الزبون، الهاتف أو المعرف..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  className="w-full pr-11 pl-4 py-2.5 bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm rounded-xl h-12 text-slate-200 placeholder-slate-500 text-right font-sans"
+                />
+                {historySearch && (
+                  <button 
+                    onClick={() => setHistorySearch('')}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Dropdowns Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              
+              {/* Status Filter */}
+              <div>
+                <label className="block text-[10px] text-slate-400 font-bold mb-1.5 flex items-center gap-1">
+                  <Filter className="w-3 h-3 text-indigo-400" />
+                  <span>تصفية بحالة الطلبية:</span>
+                </label>
+                <select
+                  value={historyStatusFilter}
+                  onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2.5 text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 h-10 text-right cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+                  <option value="all">كل الحالات (جميع الطلبات)</option>
+                  <option value="pending">قيد الانتظار ⏳</option>
+                  <option value="shipped">تم الشحن 🚚</option>
+                  <option value="delivered">تم التوصيل ✅</option>
+                  <option value="returned">مسترجع ↩️</option>
+                </select>
+              </div>
+
+              {/* State / Wilaya Filter */}
+              <div>
+                <label className="block text-[10px] text-slate-400 font-bold mb-1.5 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-indigo-400" />
+                  <span>تصفية بحسب الولاية:</span>
+                </label>
+                <select
+                  value={historyStateFilter}
+                  onChange={(e) => setHistoryStateFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2.5 text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 h-10 text-right cursor-pointer"
+                >
+                  <option value="all">كل الولايات الجزائرية</option>
+                  {historyWilayas.map((wilaya) => (
+                    <option key={wilaya} value={wilaya}>{wilaya}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Preset Filter */}
+              <div>
+                <label className="block text-[10px] text-slate-400 font-bold mb-1.5 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-indigo-400" />
+                  <span>تصفية بالفترة الزمنية:</span>
+                </label>
+                <select
+                  value={historyDateFilter}
+                  onChange={(e) => setHistoryDateFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-xs rounded-xl px-3 py-2.5 text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 h-10 text-right cursor-pointer"
+                >
+                  <option value="all">كل الأوقات</option>
+                  <option value="today">اليوم</option>
+                  <option value="yesterday">البارحة</option>
+                  <option value="week">آخر 7 أيام</option>
+                  <option value="month">آخر 30 يوم</option>
+                </select>
+              </div>
+
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, FormEvent } from 'react';
 import { Product, Sale, Expense, formatCurrency } from '../types';
 import { 
   TrendingUp, 
@@ -22,8 +22,18 @@ import {
   Coins,
   ShieldAlert,
   Save,
-  HelpCircle
+  HelpCircle,
+  Plus,
+  Trash2,
+  History
 } from 'lucide-react';
+
+interface SupplierPayment {
+  id: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
 
 // Helper to get YYYY-MM-DD format in local timezone
 const getLocalDateString = (date: Date): string => {
@@ -59,23 +69,69 @@ export default function StatsManager({
   // Interactive UI States
   const [hoveredChartBar, setHoveredChartBar] = useState<any | null>(null);
 
-  // Supplier Ledger State (stored in localStorage)
-  const [paidToSupplier, setPaidToSupplier] = useState<number>(() => {
-    const saved = localStorage.getItem('supplier_paid_amount');
-    return saved ? Number(saved) : 0;
+  // Supplier Ledger Payments State (stored in localStorage)
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>(() => {
+    const saved = localStorage.getItem('supplier_payments_history');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    const oldSaved = localStorage.getItem('supplier_paid_amount');
+    if (oldSaved && Number(oldSaved) > 0) {
+      const initialPayment: SupplierPayment = {
+        id: 'init-payment',
+        amount: Number(oldSaved),
+        date: getLocalDateString(new Date()),
+        note: 'رصيد سابق مسجل'
+      };
+      const list = [initialPayment];
+      localStorage.setItem('supplier_payments_history', JSON.stringify(list));
+      localStorage.removeItem('supplier_paid_amount');
+      return list;
+    }
+    return [];
   });
   const [showSupplierLedger, setShowSupplierLedger] = useState(true);
-  const [tempPaidInput, setTempPaidInput] = useState<string>(paidToSupplier.toString());
+  
+  // State for adding a new supplier payment
+  const [newPayAmount, setNewPayAmount] = useState<string>('');
+  const [newPayDate, setNewPayDate] = useState<string>(getLocalDateString(new Date()));
+  const [newPayNote, setNewPayNote] = useState<string>('');
+  const [payError, setPayError] = useState<string>('');
 
-  // Keep input in sync with state if state changes
-  useEffect(() => {
-    setTempPaidInput(paidToSupplier.toString());
-  }, [paidToSupplier]);
+  const paidToSupplier = useMemo(() => {
+    return supplierPayments.reduce((sum, p) => sum + p.amount, 0);
+  }, [supplierPayments]);
 
-  const saveSupplierPaidAmount = () => {
-    const amt = parseFloat(tempPaidInput) || 0;
-    setPaidToSupplier(amt);
-    localStorage.setItem('supplier_paid_amount', amt.toString());
+  const handleAddPayment = (e: FormEvent) => {
+    e.preventDefault();
+    setPayError('');
+    const amt = parseFloat(newPayAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setPayError('يرجى إدخال مبلغ صالح أكبر من 0.');
+      return;
+    }
+    const newPayment: SupplierPayment = {
+      id: 'pay-' + Date.now(),
+      amount: amt,
+      date: newPayDate || getLocalDateString(new Date()),
+      note: newPayNote.trim() || undefined
+    };
+    const updated = [...supplierPayments, newPayment];
+    setSupplierPayments(updated);
+    localStorage.setItem('supplier_payments_history', JSON.stringify(updated));
+    setNewPayAmount('');
+    setNewPayNote('');
+    setNewPayDate(getLocalDateString(new Date()));
+  };
+
+  const handleDeletePayment = (id: string) => {
+    const updated = supplierPayments.filter(p => p.id !== id);
+    setSupplierPayments(updated);
+    localStorage.setItem('supplier_payments_history', JSON.stringify(updated));
   };
 
   // Extract all unique Wilayas from sales for the dropdown filter
@@ -387,168 +443,46 @@ export default function StatsManager({
     return Array.from(breakdownMap.values());
   }, [filteredSales, products]);
 
-  // Top Selling Products breakdown
-  const topProducts = useMemo(() => {
-    const productStatsMap = new Map<string, {
-      name: string;
-      sku: string;
-      category: string;
-      cartonsCount: number;
-      pairsCount: number;
-      revenue: number;
-      profit: number;
-    }>();
+  // Order count tracking by status (تتبع أعداد الطلبيات حسب حالتها)
+  const orderStatusTracking = useMemo(() => {
+    const tracking = {
+      pending: { count: 0, revenue: 0, colis: 0 },
+      shipped: { count: 0, revenue: 0, colis: 0 },
+      delivered: { count: 0, revenue: 0, colis: 0 },
+      returned: { count: 0, revenue: 0, colis: 0 },
+      total: { count: 0, revenue: 0, colis: 0 }
+    };
 
     filteredSales.forEach(sale => {
-      if (sale.items && sale.items.length > 0) {
-        sale.items.forEach(item => {
-          const prodId = item.productId;
-          const stat = productStatsMap.get(prodId) || {
-            name: item.productName,
-            sku: item.sku || 'N/A',
-            category: products.find(p => p.id === prodId)?.category || 'أخرى',
-            cartonsCount: 0,
-            pairsCount: 0,
-            revenue: 0,
-            profit: 0
-          };
-
-          if (item.sellType === 'carton') {
-            stat.cartonsCount += item.cartonsQuantity;
-          } else {
-            stat.pairsCount += item.pairsQuantity;
-          }
-
-          stat.revenue += item.totalPrice;
-          
-          // Cost calculation
-          const product = products.find(p => p.id === item.productId);
-          const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || item.buyingPriceAtSale;
-          const pairsPerCtn = product?.pairsPerCarton || 12;
-          const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
-          const cost = item.sellType === 'carton' ? (item.cartonsQuantity * cartonBuying) : (item.pairsQuantity * singleBuying);
-          
-          stat.profit += (item.totalPrice - cost);
-          productStatsMap.set(prodId, stat);
-        });
-      } else {
-        // Fallback for flat structure sale
-        const prodId = sale.productId;
-        const stat = productStatsMap.get(prodId) || {
-          name: sale.productName,
-          sku: 'N/A',
-          category: products.find(p => p.id === prodId)?.category || 'أخرى',
-          cartonsCount: 0,
-          pairsCount: 0,
-          revenue: 0,
-          profit: 0
-        };
-
-        stat.pairsCount += sale.quantity;
-        stat.revenue += sale.totalPrice;
-        const cost = sale.buyingPriceAtSale * sale.quantity;
-        stat.profit += (sale.totalPrice - cost);
-        productStatsMap.set(prodId, stat);
-      }
-    });
-
-    return Array.from(productStatsMap.values())
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
-  }, [filteredSales, products]);
-
-  // Breakdown of Sales and delivery performance by Wilaya (State)
-  const wilayaStats = useMemo(() => {
-    const statsMap = new Map<string, {
-      wilaya: string;
-      totalSales: number;
-      revenue: number;
-      colis: number;
-      delivered: number;
-      returned: number;
-      pending: number;
-    }>();
-
-    filteredSales.forEach(sale => {
-      const state = sale.customerState?.trim() || 'غير محدد';
       const status = sale.status || 'pending';
       const col = sale.customerColis || 1;
+      const rev = sale.totalPrice;
 
-      const stat = statsMap.get(state) || {
-        wilaya: state,
-        totalSales: 0,
-        revenue: 0,
-        colis: 0,
-        delivered: 0,
-        returned: 0,
-        pending: 0
-      };
-
-      stat.totalSales += 1;
-      stat.revenue += sale.totalPrice;
-      stat.colis += col;
+      tracking.total.count += 1;
+      tracking.total.revenue += rev;
+      tracking.total.colis += col;
 
       if (status === 'delivered') {
-        stat.delivered += 1;
+        tracking.delivered.count += 1;
+        tracking.delivered.revenue += rev;
+        tracking.delivered.colis += col;
+      } else if (status === 'shipped') {
+        tracking.shipped.count += 1;
+        tracking.shipped.revenue += rev;
+        tracking.shipped.colis += col;
       } else if (status === 'returned') {
-        stat.returned += 1;
+        tracking.returned.count += 1;
+        tracking.returned.revenue += rev;
+        tracking.returned.colis += col;
       } else {
-        stat.pending += 1;
+        tracking.pending.count += 1;
+        tracking.pending.revenue += rev;
+        tracking.pending.colis += col;
       }
-
-      statsMap.set(state, stat);
     });
 
-    return Array.from(statsMap.values())
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 6);
+    return tracking;
   }, [filteredSales]);
-
-  // Top Returning Wilayas (ترتيب الولايات الأكثر إرجاعاً للسلع)
-  const topReturningWilayas = useMemo(() => {
-    const statsMap = new Map<string, {
-      wilaya: string;
-      totalSales: number;
-      returnedSales: number;
-      returnedColis: number;
-      lostPackagingCost: number;
-      returnRate: number;
-    }>();
-
-    filteredSales.forEach(sale => {
-      const state = sale.customerState?.trim() || 'غير محدد';
-      const status = sale.status || 'pending';
-      const colis = sale.customerColis || 1;
-
-      const stat = statsMap.get(state) || {
-        wilaya: state,
-        totalSales: 0,
-        returnedSales: 0,
-        returnedColis: 0,
-        lostPackagingCost: 0,
-        returnRate: 0
-      };
-
-      stat.totalSales += 1;
-      if (status === 'returned') {
-        stat.returnedSales += 1;
-        stat.returnedColis += colis;
-        stat.lostPackagingCost += colis * packagingPrice;
-      }
-
-      statsMap.set(state, stat);
-    });
-
-    return Array.from(statsMap.values())
-      .map(w => ({
-        ...w,
-        returnRate: w.totalSales > 0 ? Math.round((w.returnedSales / w.totalSales) * 100) : 0
-      }))
-      // Filter only states that have at least 1 return
-      .filter(w => w.returnedSales > 0)
-      // Sort by returnedSales descending (highest returns first)
-      .sort((a, b) => b.returnedSales - a.returnedSales || b.returnRate - a.returnRate);
-  }, [filteredSales, packagingPrice]);
 
   // Daily Sales trend chart calculator (tracks revenue & profits daily over range)
   const chartDailyTrend = useMemo(() => {
@@ -911,29 +845,15 @@ export default function StatsManager({
               <div>
                 <span className="block text-[10px] text-slate-400 font-bold mb-1">2. قيمة السلع المسترجعة (لا تدفع ثمنها):</span>
                 <span className="text-base font-black text-rose-400">{formatCurrency(financialMetrics.returnedBuyingCost)}</span>
-                <span className="block text-[9px] text-rose-300 mt-1">عادت لمخزن المورد (معفاة)</span>
+                <span className="block text-[9px] text-rose-300 mt-1 font-bold">عادت لمخزن المورد (معفاة)</span>
               </div>
 
-              {/* Input for Paid Amount */}
-              <div className="md:col-span-1">
-                <label className="block text-[10px] text-slate-400 font-bold mb-1">3. المبلغ المدفوع للمورد حالياً:</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={tempPaidInput}
-                    onChange={(e) => setTempPaidInput(e.target.value)}
-                    placeholder="مثال: 50000"
-                    className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-1 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-left font-mono h-9"
-                  />
-                  <button
-                    onClick={saveSupplierPaidAmount}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg px-3 py-1 flex items-center justify-center text-xs font-bold transition-all shrink-0 cursor-pointer h-9"
-                    title="حفظ المبلغ المدفوع"
-                  >
-                    <Save className="w-4 h-4" />
-                  </button>
-                </div>
-                <span className="block text-[9px] text-slate-500 mt-1">سيتم حفظ المبلغ في متصفحك</span>
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold mb-1">3. إجمالي المبالغ المدفوعة للمورد:</span>
+                <span className="text-base font-black text-indigo-400">{formatCurrency(paidToSupplier)}</span>
+                <span className="block text-[9px] text-slate-400 mt-1 font-bold">
+                  (عبر {supplierPayments.length} دفعات مسجلة)
+                </span>
               </div>
 
               <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col justify-center">
@@ -943,7 +863,111 @@ export default function StatsManager({
                 }`}>
                   {formatCurrency(Math.max(0, financialMetrics.deliveredBuyingCost - paidToSupplier))}
                 </span>
-                <span className="block text-[9px] text-slate-500 mt-0.5">الباقي = (تكلفة المستلمة - المدفوع)</span>
+                <span className="block text-[9px] text-slate-500 mt-0.5">الباقي = (تكلفة المستلمة - مجموع الدفعات)</span>
+              </div>
+
+            </div>
+
+            {/* NEW: Supplier Payments History & Add Form */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-4 border-t border-slate-800/60">
+              
+              {/* Form to Add Payment (5 columns) */}
+              <div className="lg:col-span-5 bg-slate-950/40 p-4 rounded-xl border border-slate-800/60 space-y-4">
+                <h4 className="text-xs font-black text-indigo-400 flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-indigo-400" />
+                  <span>تسجيل دفعة مالية جديدة للمورد</span>
+                </h4>
+
+                {payError && (
+                  <p className="text-[11px] font-bold text-rose-400 bg-rose-500/10 p-2 rounded-lg border border-rose-500/10">
+                    {payError}
+                  </p>
+                )}
+
+                <form onSubmit={handleAddPayment} className="space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">المبلغ المدفوع (د.ج) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="مثال: 15000"
+                      value={newPayAmount}
+                      onChange={(e) => setNewPayAmount(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-left font-mono h-9"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">تاريخ الدفع *</label>
+                    <input
+                      type="date"
+                      required
+                      value={newPayDate}
+                      onChange={(e) => setNewPayDate(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-right font-mono h-9"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">ملاحظة أو بيان (اختياري)</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: دفعة نقدية / تحويل CCP"
+                      value={newPayNote}
+                      onChange={(e) => setNewPayNote(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-right h-9"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 flex items-center justify-center gap-1.5 text-xs font-bold transition-all cursor-pointer h-9"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة الدفعة وحفظ السجل</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* History list of payments (7 columns) */}
+              <div className="lg:col-span-7 bg-slate-950/20 p-4 rounded-xl border border-slate-800/40 space-y-3">
+                <h4 className="text-xs font-black text-slate-300 flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-indigo-400" />
+                  <span>سجل دفعات المورد التاريخية ({supplierPayments.length})</span>
+                </h4>
+
+                {supplierPayments.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl bg-slate-950/20">
+                    لم يتم تسجيل أي دفعات مالية لهذا المورد بعد.
+                  </div>
+                ) : (
+                  <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 font-sans">
+                    {supplierPayments.map((p) => (
+                      <div
+                        key={p.id}
+                        className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-3 text-right"
+                      >
+                        <div>
+                          <span className="text-xs font-black text-slate-100">{formatCurrency(p.amount)}</span>
+                          {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-slate-500 font-mono">{p.date}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePayment(p.id)}
+                            className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/10 rounded-lg text-rose-400 transition-colors cursor-pointer"
+                            title="حذف الدفعة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
             </div>
@@ -1119,177 +1143,100 @@ export default function StatsManager({
         )}
       </div>
 
-      {/* 6. Insights Grid: Top Selling Products and Top States/Wilayas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Module A: Top Selling Products (المنتجات الأكثر مبيعاً) */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+      {/* 6. Detailed Order Counts and Statistics tracking by Status */}
+      <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-5 animate-fade-in">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
+          <div>
             <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
-              <Award className="w-5 h-5 text-indigo-400" />
-              <span>الموديلات والسلع الأكثر مبيعاً ورواجاً</span>
+              <ShoppingCart className="w-5 h-5 text-indigo-400" />
+              <span>تتبع أعداد وتفاصيل الطلبيات حسب حالتها</span>
             </h3>
-            <span className="text-[10px] text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg">الأعلى دخلاً</span>
+            <p className="text-[10px] text-slate-500 mt-0.5">يوضح تفصيلاً دقيقاً لأعداد الطرود، قيمتها الإجمالية، ونسبتها المئوية من إجمالي الطلبيات النشطة.</p>
           </div>
-
-          {topProducts.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-xs">
-              لا توجد مبيعات مسجلة في هذه الفترة لإظهار إحصائيات المنتجات.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {topProducts.map((p, idx) => (
-                <div 
-                  key={p.name + idx}
-                  className="bg-slate-950/40 p-3 rounded-xl border border-slate-800/60 flex items-center justify-between gap-4 text-right"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-6 h-6 rounded-lg bg-indigo-600/10 text-indigo-400 flex items-center justify-center text-xs font-black shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-black text-slate-200 truncate">{p.name}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">SKU: {p.sku} | {p.category}</p>
-                    </div>
-                  </div>
-
-                  <div className="text-left shrink-0">
-                    <p className="text-[10px] text-slate-500 font-bold">
-                      {p.cartonsCount > 0 ? `${p.cartonsCount} كرتون` : ''} 
-                      {p.cartonsCount > 0 && p.pairsCount > 0 ? ' و ' : ''}
-                      {p.pairsCount > 0 ? `${p.pairsCount} زوج` : ''}
-                      {p.cartonsCount === 0 && p.pairsCount === 0 ? '0 مبيعات' : ''}
-                    </p>
-                    <p className="text-xs font-black text-emerald-400 mt-0.5">{formatCurrency(p.revenue)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <span className="text-[10px] text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg shrink-0 self-start sm:self-auto font-mono">
+            إجمالي الطلبيات: {orderStatusTracking.total.count} | {orderStatusTracking.total.colis} طرود
+          </span>
         </div>
 
-        {/* Module B: Top Performing States (الولايات الأكثر شراءً ونسبة نجاحها) */}
-        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-indigo-400" />
-              <span>أداء الشحن والتوصيل حسب الولايات الجزائرية</span>
-            </h3>
-            <span className="text-[10px] text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg">توزيع جغرافي</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* Delivered Status Card */}
+          <div className="bg-gradient-to-br from-slate-950/40 to-emerald-950/5 p-4 rounded-xl border border-emerald-500/10 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>تم التوصيل ✅</span>
+              </span>
+              <span className="text-[10px] font-mono font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-sm">
+                {orderStatusTracking.total.count > 0 ? Math.round((orderStatusTracking.delivered.count / orderStatusTracking.total.count) * 100) : 0}%
+              </span>
+            </div>
+            
+            <div className="space-y-1 text-right">
+              <p className="text-xl font-black text-emerald-400">{orderStatusTracking.delivered.count} <span className="text-xs text-slate-500 font-bold">طلبيات</span></p>
+              <p className="text-[10px] text-slate-400">عدد الطرود: {orderStatusTracking.delivered.colis} طرد</p>
+              <p className="text-xs font-extrabold text-slate-200 mt-1">{formatCurrency(orderStatusTracking.delivered.revenue)}</p>
+            </div>
           </div>
 
-          {wilayaStats.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-xs">
-              لا توجد مبيعات محددة بولاية زبون لعرض التوزيع الجغرافي.
+          {/* Shipped Status Card */}
+          <div className="bg-gradient-to-br from-slate-950/40 to-blue-950/5 p-4 rounded-xl border border-blue-500/10 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-blue-400" />
+                <span>تم الشحن 🚚</span>
+              </span>
+              <span className="text-[10px] font-mono font-black text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-sm">
+                {orderStatusTracking.total.count > 0 ? Math.round((orderStatusTracking.shipped.count / orderStatusTracking.total.count) * 100) : 0}%
+              </span>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {wilayaStats.map((w, idx) => {
-                const totalFinished = w.delivered + w.returned;
-                const deliverySuccessRate = totalFinished > 0 
-                  ? Math.round((w.delivered / totalFinished) * 100) 
-                  : 100;
-
-                return (
-                  <div 
-                    key={w.wilaya}
-                    className="bg-slate-950/40 p-3 rounded-xl border border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xs font-black shrink-0">
-                        {idx + 1}
-                      </span>
-                      <div>
-                        <span className="text-xs font-black text-slate-200">{w.wilaya}</span>
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
-                          <span>{w.totalSales} طلبيات</span>
-                          <span>•</span>
-                          <span>{w.colis} طرود (كوليات)</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 justify-between sm:justify-end border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0 shrink-0">
-                      <div className="text-right sm:text-left">
-                        <span className="text-[10px] text-slate-500 block">إجمالي المداخيل</span>
-                        <span className="text-xs font-extrabold text-slate-200">{formatCurrency(w.revenue)}</span>
-                      </div>
-                      
-                      <div className="text-left shrink-0">
-                        <span className="text-[9px] text-slate-400 block">التوصيل</span>
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-sm ${
-                          deliverySuccessRate >= 80 ? 'bg-emerald-500/10 text-emerald-400' :
-                          deliverySuccessRate >= 50 ? 'bg-amber-500/10 text-amber-400' :
-                          'bg-rose-500/10 text-rose-400'
-                        }`}>
-                          {deliverySuccessRate}% نجاح
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            
+            <div className="space-y-1 text-right">
+              <p className="text-xl font-black text-blue-400">{orderStatusTracking.shipped.count} <span className="text-xs text-slate-500 font-bold">طلبيات</span></p>
+              <p className="text-[10px] text-slate-400">عدد الطرود: {orderStatusTracking.shipped.colis} طرد</p>
+              <p className="text-xs font-extrabold text-slate-200 mt-1">{formatCurrency(orderStatusTracking.shipped.revenue)}</p>
             </div>
-          )}
+          </div>
+
+          {/* Pending Status Card */}
+          <div className="bg-gradient-to-br from-slate-950/40 to-amber-950/5 p-4 rounded-xl border border-amber-500/10 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span>قيد الانتظار ⏳</span>
+              </span>
+              <span className="text-[10px] font-mono font-black text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-sm">
+                {orderStatusTracking.total.count > 0 ? Math.round((orderStatusTracking.pending.count / orderStatusTracking.total.count) * 100) : 0}%
+              </span>
+            </div>
+            
+            <div className="space-y-1 text-right">
+              <p className="text-xl font-black text-amber-500">{orderStatusTracking.pending.count} <span className="text-xs text-slate-500 font-bold">طلبيات</span></p>
+              <p className="text-[10px] text-slate-400">عدد الطرود: {orderStatusTracking.pending.colis} طرد</p>
+              <p className="text-xs font-extrabold text-slate-200 mt-1">{formatCurrency(orderStatusTracking.pending.revenue)}</p>
+            </div>
+          </div>
+
+          {/* Returned Status Card */}
+          <div className="bg-gradient-to-br from-slate-950/40 to-rose-950/5 p-4 rounded-xl border border-rose-500/10 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <RotateCcw className="w-4 h-4 text-rose-400" />
+                <span>مسترجع ↩️</span>
+              </span>
+              <span className="text-[10px] font-mono font-black text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-sm">
+                {orderStatusTracking.total.count > 0 ? Math.round((orderStatusTracking.returned.count / orderStatusTracking.total.count) * 100) : 0}%
+              </span>
+            </div>
+            
+            <div className="space-y-1 text-right">
+              <p className="text-xl font-black text-rose-400">{orderStatusTracking.returned.count} <span className="text-xs text-slate-500 font-bold">طلبيات</span></p>
+              <p className="text-[10px] text-slate-400">عدد الطرود: {orderStatusTracking.returned.colis} طرد</p>
+              <p className="text-xs font-extrabold text-slate-200 mt-1">{formatCurrency(orderStatusTracking.returned.revenue)}</p>
+            </div>
+          </div>
+
         </div>
-
-      </div>
-
-      {/* 7. Top Returning States / Wilayas (الولايات الأكثر إرجاعاً للسلع) */}
-      <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-rose-400" />
-            <div>
-              <h3 className="text-sm font-black text-slate-100">⚠️ ترتيب الولايات الأكثر إرجاعاً للسلع (Top Returning Wilayas)</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5">الولايات ذات أعلى معدلات مسترجعات لمساعدتك في اتخاذ قرارات الشحن بحذر.</p>
-            </div>
-          </div>
-          <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg font-bold">الأكثر خسارة للتغليف</span>
-        </div>
-
-        {topReturningWilayas.length === 0 ? (
-          <div className="py-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl bg-slate-950/10">
-            🎉 رائع! لا توجد ولايات بها طلبيات مسترجعة حالياً خلال هذه الفترة.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {topReturningWilayas.map((w, idx) => (
-              <div 
-                key={w.wilaya}
-                className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between space-y-3"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center text-xs font-black shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div>
-                      <span className="text-xs font-black text-slate-200 block">{w.wilaya}</span>
-                      <span className="text-[9px] text-slate-500">إجمالي الطلبات بالولاية: {w.totalSales}</span>
-                    </div>
-                  </div>
-                  
-                  {/* Return rate percentage badge */}
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400">
-                    معدل الارتجاع: {w.returnRate}%
-                  </span>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/40 flex items-center justify-between">
-                  <div>
-                    <span className="text-[9px] text-slate-500 block">المسترجعات</span>
-                    <span className="text-xs font-bold text-slate-300">{w.returnedSales} طلبيات ({w.returnedColis} طرود)</span>
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[9px] text-rose-400 block font-bold">خسائر التغليف والتوصيل</span>
-                    <span className="text-xs font-black text-rose-400">{formatCurrency(w.lostPackagingCost)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
     </div>
