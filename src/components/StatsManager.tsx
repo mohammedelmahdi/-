@@ -1028,20 +1028,20 @@ export default function StatsManager({
                 </div>
 
                 <div>
-                  <span className="block text-[10px] text-rose-400 font-bold mb-1">3. قيمة المرتجعات والمعاد (-):</span>
-                  <span className="text-base font-black text-rose-500">-{formatCurrency(financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0))}</span>
+                  <span className="block text-[10px] text-rose-400 font-bold mb-1">3. قيمة السلع المعادة للمورد (-):</span>
+                  <span className="text-base font-black text-rose-500">-{formatCurrency(financialMetrics.returnedToSupplierBuyingCost || 0)}</span>
                   <span className="block text-[9px] text-rose-400 mt-1 font-bold">
-                    ({financialMetrics.returnedCount} مسترجع + {financialMetrics.returnedToSupplierCount || 0} معاد للمورد) بسعر الشراء
+                    ({financialMetrics.returnedToSupplierCount || 0} طلبية معادة للمورد) بسعر الشراء
                   </span>
                 </div>
 
                 <div className="bg-emerald-500/5 p-2.5 rounded-xl border border-emerald-500/20">
                   <span className="block text-[10px] text-emerald-400 font-bold mb-1">4. إجمالي مستحقات المورد:</span>
                   <span className="text-base font-black text-emerald-400">
-                    {formatCurrency(financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0)))}
+                    {formatCurrency(financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedToSupplierBuyingCost || 0))}
                   </span>
                   <span className="block text-[8.5px] text-slate-400 mt-1">
-                    (البضاعة + التغليف - المرتجعات والمعاد)
+                    (البضاعة + التغليف - المعاد للمورد)
                   </span>
                 </div>
 
@@ -1056,9 +1056,9 @@ export default function StatsManager({
                 <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col justify-center">
                   <span className="block text-[10px] text-slate-400 font-bold">6. المستحقات المتبقية للمورد:</span>
                   <span className={`text-lg font-black mt-1 block ${
-                    ((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0))) - paidToSupplier) > 0 ? 'text-amber-500' : 'text-emerald-400'
+                    ((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedToSupplierBuyingCost || 0)) - paidToSupplier) > 0 ? 'text-amber-500' : 'text-emerald-400'
                   }`}>
-                    {formatCurrency((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0))) - paidToSupplier)}
+                    {formatCurrency((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedToSupplierBuyingCost || 0)) - paidToSupplier)}
                   </span>
                   <span className="block text-[8.5px] text-slate-500 mt-0.5">الباقي = (المستحقات الكلية - المدفوع)</span>
                 </div>
