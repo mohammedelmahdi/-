@@ -38,7 +38,7 @@ export interface SaleItem {
   imageUrl?: string;
 }
 
-export type SaleStatus = 'pending' | 'shipped' | 'delivered' | 'returned';
+export type SaleStatus = 'pending' | 'shipped' | 'delivered' | 'returned' | 'returned_to_supplier';
 
 export interface Sale {
   id: string;

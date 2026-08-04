@@ -1071,6 +1071,7 @@ export default function SalesManager({
                   <option value="shipped">تم الشحن 🚚</option>
                   <option value="delivered">تم التوصيل ✅</option>
                   <option value="returned">مسترجع ↩️</option>
+                  <option value="returned_to_supplier">معاد للمورد 🔄</option>
                 </select>
               </div>
 
@@ -1174,6 +1175,9 @@ export default function SalesManager({
                         {sale.status === 'returned' && (
                           <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-md text-[10px] font-bold">مسترجع ↩️</span>
                         )}
+                        {sale.status === 'returned_to_supplier' && (
+                          <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md text-[10px] font-bold">معاد للمورد 🔄</span>
+                        )}
                         {(sale.status === 'pending' || !sale.status) && (
                           <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-[10px] font-bold">قيد الانتظار ⏳</span>
                         )}
@@ -1186,7 +1190,8 @@ export default function SalesManager({
                           <option value="pending">تغيير: انتظار</option>
                           <option value="shipped">تغيير: شحن</option>
                           <option value="delivered">تغيير: توصيل</option>
-                          <option value="returned">تغيير: إرجاع</option>
+                          <option value="returned">تغيير: إرجاع للزبون</option>
+                          <option value="returned_to_supplier">تغيير: إعادة للمورد</option>
                         </select>
                       </div>
                     </div>
@@ -1277,6 +1282,9 @@ export default function SalesManager({
                             {sale.status === 'returned' && (
                               <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-md text-[10px] font-bold">مسترجع ↩️</span>
                             )}
+                            {sale.status === 'returned_to_supplier' && (
+                              <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md text-[10px] font-bold">معاد للمورد 🔄</span>
+                            )}
                             {(sale.status === 'pending' || !sale.status) && (
                               <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-[10px] font-bold">قيد الانتظار ⏳</span>
                             )}
@@ -1290,6 +1298,7 @@ export default function SalesManager({
                               <option value="shipped">تم الشحن</option>
                               <option value="delivered">تم التوصيل</option>
                               <option value="returned">مسترجع</option>
+                              <option value="returned_to_supplier">إعادة للمورد</option>
                             </select>
                           </div>
                         </td>

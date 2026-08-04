@@ -356,6 +356,9 @@ export default function StatsManager({
     let returnedRevenue = 0;
     let returnedBuyingCost = 0;
     
+    let returnedToSupplierCount = 0;
+    let returnedToSupplierBuyingCost = 0;
+    
     let totalColisCount = 0;
     let deliveredColisCount = 0;
     let returnedColisCount = 0;
@@ -406,6 +409,10 @@ export default function StatsManager({
         returnedRevenue += sale.totalPrice;
         returnedBuyingCost += buyingCost;
         returnedColisCount += colis;
+      } else if (status === 'returned_to_supplier') {
+        returnedToSupplierCount++;
+        returnedToSupplierBuyingCost += buyingCost;
+        returnedColisCount += colis;
       }
     });
 
@@ -440,7 +447,7 @@ export default function StatsManager({
     const netProfit = actualDeliveredProfit - totalExpensesAmount - totalPackagingCost - totalDeliveryCommission;
 
     // Delivery Success Rate
-    const totalFinishedSales = filteredSales.filter(s => s.status === 'delivered' || s.status === 'returned').length;
+    const totalFinishedSales = filteredSales.filter(s => s.status === 'delivered' || s.status === 'returned' || s.status === 'returned_to_supplier').length;
     const deliveryRate = totalFinishedSales > 0 
       ? Math.round((filteredSales.filter(s => s.status === 'delivered').length / totalFinishedSales) * 100) 
       : 0;
@@ -458,6 +465,8 @@ export default function StatsManager({
       returnedCount,
       returnedRevenue,
       returnedBuyingCost,
+      returnedToSupplierCount,
+      returnedToSupplierBuyingCost,
       returnedColisCount,
       returnedPackagingLoss,
       totalExpensesAmount,
@@ -1008,7 +1017,7 @@ export default function StatsManager({
                   <span className="block text-[10px] text-slate-400 font-bold mb-1">1. مجموع السلع المعطاة (كل البضاعة):</span>
                   <span className="text-base font-black text-slate-100">{formatCurrency(financialMetrics.totalBuyingCost)}</span>
                   <span className="block text-[9px] text-indigo-400 mt-1 font-bold">
-                    ({financialMetrics.totalSalesVolume} قطعة مرسلة/معطاة)
+                    ({financialMetrics.totalSalesVolume} قطعة مرسلة بسعر الشراء)
                   </span>
                 </div>
 
@@ -1019,20 +1028,20 @@ export default function StatsManager({
                 </div>
 
                 <div>
-                  <span className="block text-[10px] text-rose-400 font-bold mb-1">3. قيمة المرتجعات المنقوصة (-):</span>
-                  <span className="text-base font-black text-rose-500">-{formatCurrency(financialMetrics.returnedBuyingCost)}</span>
+                  <span className="block text-[10px] text-rose-400 font-bold mb-1">3. قيمة المرتجعات والمعاد (-):</span>
+                  <span className="text-base font-black text-rose-500">-{formatCurrency(financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0))}</span>
                   <span className="block text-[9px] text-rose-400 mt-1 font-bold">
-                    ({financialMetrics.returnedCount} طلبية مسترجعة منقوصة)
+                    ({financialMetrics.returnedCount} مسترجع + {financialMetrics.returnedToSupplierCount || 0} معاد للمورد) بسعر الشراء
                   </span>
                 </div>
 
                 <div className="bg-emerald-500/5 p-2.5 rounded-xl border border-emerald-500/20">
                   <span className="block text-[10px] text-emerald-400 font-bold mb-1">4. إجمالي مستحقات المورد:</span>
                   <span className="text-base font-black text-emerald-400">
-                    {formatCurrency(financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - financialMetrics.returnedBuyingCost)}
+                    {formatCurrency(financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0)))}
                   </span>
                   <span className="block text-[8.5px] text-slate-400 mt-1">
-                    (البضاعة + التغليف - المرتجعات)
+                    (البضاعة + التغليف - المرتجعات والمعاد)
                   </span>
                 </div>
 
@@ -1047,9 +1056,9 @@ export default function StatsManager({
                 <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col justify-center">
                   <span className="block text-[10px] text-slate-400 font-bold">6. المستحقات المتبقية للمورد:</span>
                   <span className={`text-lg font-black mt-1 block ${
-                    ((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - financialMetrics.returnedBuyingCost) - paidToSupplier) > 0 ? 'text-amber-500' : 'text-emerald-400'
+                    ((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0))) - paidToSupplier) > 0 ? 'text-amber-500' : 'text-emerald-400'
                   }`}>
-                    {formatCurrency((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - financialMetrics.returnedBuyingCost) - paidToSupplier)}
+                    {formatCurrency((financialMetrics.totalBuyingCost + financialMetrics.totalPackagingCost - (financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0))) - paidToSupplier)}
                   </span>
                   <span className="block text-[8.5px] text-slate-500 mt-0.5">الباقي = (المستحقات الكلية - المدفوع)</span>
                 </div>
@@ -1062,15 +1071,15 @@ export default function StatsManager({
                   <span className="block text-[10px] text-slate-400 font-bold mb-1">1. ثمن البضاعة الموصلة فعلياً:</span>
                   <span className="text-base font-black text-slate-100">{formatCurrency(financialMetrics.deliveredBuyingCost)}</span>
                   <span className="block text-[9px] text-emerald-400 mt-1 font-bold">
-                    ({financialMetrics.deliveredPairsCount} قطعة تم بيعها وتوصيلها)
+                    ({financialMetrics.deliveredPairsCount} قطعة تم بيعها وتوصيلها بسعر الشراء)
                   </span>
                 </div>
 
                 <div>
-                  <span className="block text-[10px] text-slate-400 font-bold mb-1">2. قيمة السلع المسترجعة المعفاة:</span>
-                  <span className="text-base font-black text-rose-400">{formatCurrency(financialMetrics.returnedBuyingCost)}</span>
+                  <span className="block text-[10px] text-slate-400 font-bold mb-1">2. قيمة السلع المسترجعة والمعاد المعفاة:</span>
+                  <span className="text-base font-black text-rose-400">{formatCurrency(financialMetrics.returnedBuyingCost + (financialMetrics.returnedToSupplierBuyingCost || 0))}</span>
                   <span className="block text-[9px] text-rose-300 mt-1 font-bold">
-                    عادت لمخزن المورد (معفاة من الدفع)
+                    ({financialMetrics.returnedCount} مسترجع + {financialMetrics.returnedToSupplierCount || 0} معاد للمورد) بسعر الشراء معفاة
                   </span>
                 </div>
 
