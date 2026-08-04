@@ -165,6 +165,26 @@ export default function StatsManager({
     return deliveryPayments.reduce((sum, p) => sum + p.amount, 0);
   }, [deliveryPayments]);
 
+  const receivedFromDeliveryCommission = useMemo(() => {
+    return deliveryPayments.reduce((sum, p) => sum + (p.amount * 0.012), 0);
+  }, [deliveryPayments]);
+
+  const receivedFromDeliveryNet = useMemo(() => {
+    return receivedFromDelivery - receivedFromDeliveryCommission;
+  }, [receivedFromDelivery, receivedFromDeliveryCommission]);
+
+  const allTimeDeliveredRevenue = useMemo(() => {
+    return sales
+      .filter(s => s.status === 'delivered')
+      .reduce((sum, s) => sum + s.totalPrice, 0);
+  }, [sales]);
+
+  const allTimeDeliveredColisCount = useMemo(() => {
+    return sales
+      .filter(s => s.status === 'delivered')
+      .reduce((sum, s) => sum + (s.customerColis || 1), 0);
+  }, [sales]);
+
   const handleAddDeliveryPayment = (e: FormEvent) => {
     e.preventDefault();
     setDeliveryPayError('');
@@ -390,13 +410,24 @@ export default function StatsManager({
     // Packaging cost for returned parcels is a complete loss.
     const returnedPackagingLoss = returnedColisCount * packagingPrice;
 
+    // Filter Delivery Payments based on date range to calculate period commission
+    const filteredPeriodDeliveryPayments = deliveryPayments.filter(p => {
+      const { start, end } = activeDateRange;
+      if (start && p.date < start) return false;
+      if (end && p.date > end) return false;
+      return true;
+    });
+
+    // Sum of commissions for delivery payments in the active period
+    const totalDeliveryCommission = filteredPeriodDeliveryPayments.reduce((sum, p) => sum + (p.amount * 0.012), 0);
+
     // Gross profits
     const totalPotentialProfit = totalGrossRevenue - totalBuyingCost; // Profit if all are delivered
     const actualDeliveredProfit = deliveredRevenue - deliveredBuyingCost; // Realized product profit
 
     // Net cash flow and actual net profit
-    // Net profit = actual delivered profit - operational expenses - total packaging costs of all parcels
-    const netProfit = actualDeliveredProfit - totalExpensesAmount - totalPackagingCost;
+    // Net profit = actual delivered profit - operational expenses - total packaging costs of all parcels - delivery collection commissions
+    const netProfit = actualDeliveredProfit - totalExpensesAmount - totalPackagingCost - totalDeliveryCommission;
 
     // Delivery Success Rate
     const totalFinishedSales = filteredSales.filter(s => s.status === 'delivered' || s.status === 'returned').length;
@@ -421,6 +452,7 @@ export default function StatsManager({
       returnedPackagingLoss,
       totalExpensesAmount,
       totalPackagingCost,
+      totalDeliveryCommission,
       totalPotentialProfit,
       actualDeliveredProfit,
       netProfit,
@@ -428,7 +460,7 @@ export default function StatsManager({
       totalColisCount,
       totalSalesCount: filteredSales.length
     };
-  }, [filteredSales, filteredExpenses, products, packagingPrice]);
+  }, [filteredSales, filteredExpenses, products, packagingPrice, deliveryPayments, activeDateRange]);
 
   // Breakdown of Delivered Items for Supplier Accounts Settle (تحاسب المورد)
   const supplierDeliveredBreakdown = useMemo(() => {
@@ -887,6 +919,13 @@ export default function StatsManager({
                 <span className="text-slate-400">إجمالي تكاليف التغليف (كل الطرود):</span>
                 <span className="text-slate-200 font-bold">-{formatCurrency(financialMetrics.totalPackagingCost)}</span>
               </div>
+              <div className="flex justify-between items-center text-xs">
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400">عمولة شركة التوصيل للتحصيل:</span>
+                  <span className="text-[10px] text-rose-400 font-bold">(1.2% / 120 دج لكل 10,000)</span>
+                </div>
+                <span className="text-slate-200 font-bold">-{formatCurrency(financialMetrics.totalDeliveryCommission)}</span>
+              </div>
               <div className="flex justify-between items-center pt-2.5 border-t border-slate-800/60">
                 <span className="text-xs text-emerald-400 font-extrabold">الربح الصافي الحقيقي للنشاط:</span>
                 <span className="text-lg font-black text-emerald-400">
@@ -896,7 +935,7 @@ export default function StatsManager({
             </div>
           </div>
           <div className="mt-4 pt-2 border-t border-slate-800/40 flex items-center gap-1 text-[10px] text-indigo-300">
-            <span>الصافي = (أرباح التوصيل - المصاريف - تغليف الكل)</span>
+            <span>الصافي = (أرباح التوصيل - المصاريف - التغليف - عمولة التوصيل)</span>
           </div>
         </div>
 
@@ -1145,32 +1184,51 @@ export default function StatsManager({
           <div className="p-5 space-y-6">
             
             {/* Payment status & Balance calculator */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/60 p-5 rounded-2xl border border-slate-800/60">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-950/60 p-5 rounded-2xl border border-slate-800/60">
               
-              <div>
-                <span className="block text-[10px] text-slate-400 font-bold mb-1">1. إجمالي ما تم تحصيله من الزبائن (الطلبيات الموصلة):</span>
-                <span className="text-base font-black text-slate-100">{formatCurrency(financialMetrics.deliveredRevenue)}</span>
-                <span className="block text-[9px] text-emerald-400 mt-1 font-bold">
-                  ({financialMetrics.deliveredColisCount} طرد تم توصيله واستلام ثمنه)
-                </span>
+              <div className="space-y-2">
+                <span className="block text-[10px] text-slate-400 font-bold">1. إجمالي تحصيلات الطلبيات الموصلة:</span>
+                <div>
+                  <span className="text-xs text-slate-400 block">إجمالي الكل (تاريخي):</span>
+                  <span className="text-base font-black text-slate-100">{formatCurrency(allTimeDeliveredRevenue)}</span>
+                </div>
+                <div className="pt-1.5 border-t border-slate-800/40">
+                  <span className="text-[10px] text-slate-400 block">الفترة المحددة:</span>
+                  <span className="text-xs font-bold text-slate-300">{formatCurrency(financialMetrics.deliveredRevenue)}</span>
+                  <span className="block text-[9px] text-emerald-400 font-bold mt-0.5">
+                    ({financialMetrics.deliveredColisCount} طرد موصل في الفترة)
+                  </span>
+                </div>
               </div>
 
-              <div>
-                <span className="block text-[10px] text-slate-400 font-bold mb-1">2. إجمالي الأموال المستلمة من شركة التوصيل (على دفعات):</span>
-                <span className="text-base font-black text-indigo-400">{formatCurrency(receivedFromDelivery)}</span>
-                <span className="block text-[9px] text-slate-400 mt-1 font-bold">
-                  (عبر {deliveryPayments.length} دفعة مسجلة في السجل أدناه)
-                </span>
+              <div className="space-y-2">
+                <span className="block text-[10px] text-indigo-400 font-bold">2. دفعات شركة التوصيل والعمولة (التحصيل):</span>
+                <div>
+                  <span className="text-xs text-slate-400 block">الدفعات المسجلة (الخام):</span>
+                  <span className="text-base font-black text-indigo-400">{formatCurrency(receivedFromDelivery)}</span>
+                </div>
+                <div className="pt-1.5 border-t border-slate-800/40 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>نسبة الشركة (1.2%):</span>
+                    <span className="text-rose-400 font-bold">-{formatCurrency(receivedFromDeliveryCommission)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-slate-800/20">
+                    <span>الصافي المستلم فعلياً:</span>
+                    <span className="text-emerald-400 font-black">{formatCurrency(receivedFromDeliveryNet)}</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col justify-center">
-                <span className="block text-[10px] text-slate-400 font-bold">3. المستحقات المتبقية في ذمة شركة التوصيل:</span>
-                <span className={`text-lg font-black mt-1 block ${
-                  (financialMetrics.deliveredRevenue - receivedFromDelivery) > 0 ? 'text-amber-500' : 'text-emerald-400'
-                }`}>
-                  {formatCurrency(Math.max(0, financialMetrics.deliveredRevenue - receivedFromDelivery))}
-                </span>
-                <span className="block text-[9px] text-slate-500 mt-0.5">الباقي = (المحصل للطلبيات الموصلة - مجموع الدفعات المستلمة)</span>
+              <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold">3. المستحقات المتبقية في ذمة شركة التوصيل:</span>
+                  <span className={`text-lg font-black mt-1 block ${
+                    (allTimeDeliveredRevenue - receivedFromDelivery) > 0 ? 'text-amber-500' : 'text-emerald-400'
+                  }`}>
+                    {formatCurrency(Math.max(0, allTimeDeliveredRevenue - receivedFromDelivery))}
+                  </span>
+                </div>
+                <span className="block text-[9px] text-slate-500 mt-2">الباقي = (إجمالي كل المبيعات الموصلة - إجمالي الدفعات المسجلة)</span>
               </div>
 
             </div>
@@ -1256,8 +1314,16 @@ export default function StatsManager({
                         className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-3 text-right"
                       >
                         <div>
-                          <span className="text-xs font-black text-emerald-400">{formatCurrency(p.amount)}</span>
-                          {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-emerald-400">{formatCurrency(p.amount)}</span>
+                            <span className="text-[9px] text-slate-500">(الدفعة الإجمالية)</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-[9px] text-slate-400">
+                            <span className="text-rose-400 font-bold">العمولة (1.2%): -{formatCurrency(p.amount * 0.012)}</span>
+                            <span>•</span>
+                            <span className="text-emerald-400 font-bold">الصافي: {formatCurrency(p.amount - p.amount * 0.012)}</span>
+                          </div>
+                          {p.note && <p className="text-[10px] text-slate-400 mt-1 font-sans">{p.note}</p>}
                         </div>
                         
                         <div className="flex items-center gap-3">
