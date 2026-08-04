@@ -90,8 +90,22 @@ export default function Dashboard({
     const totalParcels = sales.reduce((sum, s) => sum + (s.customerColis || 0), 0);
     const totalPackagingCost = totalParcels * packagingPrice;
 
+    // Delivery payments commission (1.2% or 120 DZD per 10,000 DZD received)
+    let totalDeliveryCommission = 0;
+    try {
+      const saved = localStorage.getItem('delivery_payments_history');
+      if (saved) {
+        const deliveryPayments = JSON.parse(saved);
+        if (Array.isArray(deliveryPayments)) {
+          totalDeliveryCommission = deliveryPayments.reduce((sum: number, p: any) => sum + (p.amount * 0.012), 0);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse delivery payments for dashboard metrics:', e);
+    }
+
     // Net Profit
-    const netProfit = totalProfit - totalExpenses - totalPackagingCost;
+    const netProfit = totalProfit - totalExpenses - totalPackagingCost - totalDeliveryCommission;
 
     // Low stock items (quantity < 5, but > 0)
     const lowStockCount = products.filter(p => p.quantity > 0 && p.quantity < 5).length;
@@ -107,6 +121,7 @@ export default function Dashboard({
       netProfit,
       totalExpenses,
       totalPackagingCost,
+      totalDeliveryCommission,
       lowStockCount,
       outOfStockCount,
     };
@@ -277,6 +292,7 @@ export default function Dashboard({
             <div className="text-[9px] text-slate-400 mt-1 space-y-0.5 font-medium truncate">
               <p>المصاريف: <span className="text-rose-400 font-bold">{formatCurrency(metrics.totalExpenses)}</span></p>
               <p>التغليف: <span className="text-orange-400 font-bold">{formatCurrency(metrics.totalPackagingCost)}</span></p>
+              <p>عمولة التوصيل: <span className="text-rose-400 font-bold">{formatCurrency(metrics.totalDeliveryCommission)}</span></p>
             </div>
           </div>
         </motion.div>
