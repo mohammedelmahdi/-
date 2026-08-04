@@ -92,11 +92,13 @@ export default function Dashboard({
 
     // Delivery payments commission (manual sum)
     let totalDeliveryCommission = 0;
+    let receivedFromDelivery = 0;
     try {
       const saved = localStorage.getItem('delivery_payments_history');
       if (saved) {
         const deliveryPayments = JSON.parse(saved);
         if (Array.isArray(deliveryPayments)) {
+          receivedFromDelivery = deliveryPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
           totalDeliveryCommission = deliveryPayments.reduce((sum: number, p: any) => sum + (p.commission ?? 0), 0);
         }
       }
@@ -106,6 +108,18 @@ export default function Dashboard({
 
     // Net Profit
     const netProfit = totalProfit - totalExpenses - totalPackagingCost - totalDeliveryCommission;
+
+    // All time delivered revenue
+    const allTimeDeliveredRevenue = sales
+      .filter(s => s.status === 'delivered')
+      .reduce((sum, s) => sum + s.totalPrice, 0);
+
+    // Remaining with delivery company
+    const receivedFromDeliveryTotalSettled = receivedFromDelivery + totalDeliveryCommission;
+    const remainingWithDelivery = Math.max(0, allTimeDeliveredRevenue - receivedFromDeliveryTotalSettled);
+
+    // Current net profit actually in hand after withdrawal
+    const currentNetProfit = netProfit - remainingWithDelivery;
 
     // Low stock items (quantity < 5, but > 0)
     const lowStockCount = products.filter(p => p.quantity > 0 && p.quantity < 5).length;
@@ -119,6 +133,9 @@ export default function Dashboard({
       todaySalesCount: todaySales.length,
       totalProfit,
       netProfit,
+      currentNetProfit,
+      receivedFromDelivery,
+      remainingWithDelivery,
       totalExpenses,
       totalPackagingCost,
       totalDeliveryCommission,
@@ -204,7 +221,7 @@ export default function Dashboard({
       </div>
 
       {/* Key Stats Bento Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         
         {/* Metric Card: Valeur du Stock */}
         <motion.div 
@@ -274,25 +291,48 @@ export default function Dashboard({
         {/* Metric Card: Net Profit Card */}
         <motion.div 
           whileHover={{ y: -3 }}
-          className="bg-slate-900 p-3.5 sm:p-5 rounded-2xl border-2 border-indigo-500/50 shadow-indigo-900/10 shadow-2xl flex flex-col justify-between min-h-[115px] sm:min-h-[140px] relative overflow-hidden"
+          className="bg-slate-900 p-3.5 sm:p-5 rounded-2xl border border-slate-800/80 shadow-xl flex flex-col justify-between min-h-[115px] sm:min-h-[140px]"
         >
-          <div className="absolute top-0 left-0 bg-indigo-500 text-[8px] sm:text-[9px] text-white font-black px-2 py-0.5 rounded-br-lg uppercase tracking-wider">
-            صافي الأرباح
-          </div>
-          <div className="flex items-center justify-between gap-1 mt-2">
-            <span className="text-[11px] sm:text-sm font-black text-indigo-400 truncate">صافي الأرباح</span>
-            <div className="p-1.5 sm:p-2 bg-indigo-500/20 rounded-lg text-indigo-300 font-black shrink-0">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-sm font-bold text-slate-400 truncate">صافي الأرباح</span>
+            <div className="p-1.5 sm:p-2 bg-indigo-500/10 rounded-lg text-indigo-400 shrink-0">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
           <div className="mt-2">
-            <span className={`text-base sm:text-lg md:text-xl font-black block truncate ${metrics.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <span className={`text-base sm:text-lg md:text-xl font-bold block truncate ${metrics.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {formatCurrency(metrics.netProfit)}
             </span>
             <div className="text-[9px] text-slate-400 mt-1 space-y-0.5 font-medium truncate">
               <p>المصاريف: <span className="text-rose-400 font-bold">{formatCurrency(metrics.totalExpenses)}</span></p>
               <p>التغليف: <span className="text-orange-400 font-bold">{formatCurrency(metrics.totalPackagingCost)}</span></p>
-              <p>عمولة التوصيل: <span className="text-rose-400 font-bold">{formatCurrency(metrics.totalDeliveryCommission)}</span></p>
+              <p>العمولة: <span className="text-rose-400 font-bold">{formatCurrency(metrics.totalDeliveryCommission)}</span></p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Metric Card: Realized Net Profit (Actual Cash In Hand / After Withdrawals) */}
+        <motion.div 
+          whileHover={{ y: -3 }}
+          className="bg-slate-900 p-3.5 sm:p-5 rounded-2xl border-2 border-emerald-500/50 shadow-emerald-900/10 shadow-2xl flex flex-col justify-between min-h-[115px] sm:min-h-[140px] relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 bg-emerald-600 text-[8px] sm:text-[9px] text-white font-black px-2 py-0.5 rounded-br-lg uppercase tracking-wider">
+            صافي الربح الفعلي
+          </div>
+          <div className="flex items-center justify-between gap-1 mt-2">
+            <span className="text-[11px] sm:text-sm font-black text-emerald-400 truncate">الصافي الحالي</span>
+            <div className="p-1.5 sm:p-2 bg-emerald-500/20 rounded-lg text-emerald-300 font-black shrink-0">
+              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <span className={`text-base sm:text-lg md:text-xl font-black block truncate ${metrics.currentNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {formatCurrency(metrics.currentNetProfit)}
+            </span>
+            <div className="text-[9px] text-slate-400 mt-1 space-y-0.5 font-medium truncate">
+              <p>الصافي المستلم: <span className="text-emerald-400 font-bold">{formatCurrency(metrics.receivedFromDelivery)}</span></p>
+              <p>بانتظار السحب: <span className="text-amber-500 font-bold">{formatCurrency(metrics.remainingWithDelivery)}</span></p>
+              <p className="text-slate-500 text-[8.5px] mt-0.5 font-sans">بعد التكلفة والمصاريف 💰</p>
             </div>
           </div>
         </motion.div>
