@@ -35,6 +35,13 @@ interface SupplierPayment {
   note?: string;
 }
 
+interface DeliveryPayment {
+  id: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
 // Helper to get YYYY-MM-DD format in local timezone
 const getLocalDateString = (date: Date): string => {
   const year = date.getFullYear();
@@ -132,6 +139,58 @@ export default function StatsManager({
     const updated = supplierPayments.filter(p => p.id !== id);
     setSupplierPayments(updated);
     localStorage.setItem('supplier_payments_history', JSON.stringify(updated));
+  };
+
+  // Delivery Ledger Payments State (stored in localStorage)
+  const [deliveryPayments, setDeliveryPayments] = useState<DeliveryPayment[]>(() => {
+    const saved = localStorage.getItem('delivery_payments_history');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return [];
+  });
+  const [showDeliveryLedger, setShowDeliveryLedger] = useState(true);
+  
+  // State for adding a new delivery payment
+  const [newDeliveryPayAmount, setNewDeliveryPayAmount] = useState<string>('');
+  const [newDeliveryPayDate, setNewDeliveryPayDate] = useState<string>(getLocalDateString(new Date()));
+  const [newDeliveryPayNote, setNewDeliveryPayNote] = useState<string>('');
+  const [deliveryPayError, setDeliveryPayError] = useState<string>('');
+
+  const receivedFromDelivery = useMemo(() => {
+    return deliveryPayments.reduce((sum, p) => sum + p.amount, 0);
+  }, [deliveryPayments]);
+
+  const handleAddDeliveryPayment = (e: FormEvent) => {
+    e.preventDefault();
+    setDeliveryPayError('');
+    const amt = parseFloat(newDeliveryPayAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setDeliveryPayError('يرجى إدخال مبلغ صالح أكبر من 0.');
+      return;
+    }
+    const newPayment: DeliveryPayment = {
+      id: 'delpay-' + Date.now(),
+      amount: amt,
+      date: newDeliveryPayDate || getLocalDateString(new Date()),
+      note: newDeliveryPayNote.trim() || undefined
+    };
+    const updated = [...deliveryPayments, newPayment];
+    setDeliveryPayments(updated);
+    localStorage.setItem('delivery_payments_history', JSON.stringify(updated));
+    setNewDeliveryPayAmount('');
+    setNewDeliveryPayNote('');
+    setNewDeliveryPayDate(getLocalDateString(new Date()));
+  };
+
+  const handleDeleteDeliveryPayment = (id: string) => {
+    const updated = deliveryPayments.filter(p => p.id !== id);
+    setDeliveryPayments(updated);
+    localStorage.setItem('delivery_payments_history', JSON.stringify(updated));
   };
 
   // Extract all unique Wilayas from sales for the dropdown filter
@@ -442,6 +501,13 @@ export default function StatsManager({
 
     return Array.from(breakdownMap.values());
   }, [filteredSales, products]);
+
+  // Breakdown of Delivered Sales for Delivery Cash Collection (تحصيل أموال التوصيل)
+  const deliveryDeliveredBreakdown = useMemo(() => {
+    return filteredSales
+      .filter(sale => sale.status === 'delivered')
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [filteredSales]);
 
   // Order count tracking by status (تتبع أعداد الطلبيات حسب حالتها)
   const orderStatusTracking = useMemo(() => {
@@ -1055,7 +1121,222 @@ export default function StatsManager({
 
       </div>
 
-      {/* 5. SVG Interactive Trend Chart */}
+      {/* 5. Delivery Company Payments Ledger (تتبع تحصيل المستحقات المالية من شركة التوصيل) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        
+        {/* Toggleable header */}
+        <div 
+          onClick={() => setShowDeliveryLedger(!showDeliveryLedger)}
+          className="bg-slate-950 p-5 border-b border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-950/80 transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
+              <Truck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-100">🚚 كشف حساب ومتابعة أموال شركة التوصيل (التحصيلات والدفعات)</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">تتبع المبالغ التي جمعتها شركة التوصيل من الزبائن، وسجل الدفعات المستلمة منها لمعرفة أموالك المتبقية لديها.</p>
+            </div>
+          </div>
+          <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${showDeliveryLedger ? 'rotate-180' : ''}`} />
+        </div>
+
+        {showDeliveryLedger && (
+          <div className="p-5 space-y-6">
+            
+            {/* Payment status & Balance calculator */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/60 p-5 rounded-2xl border border-slate-800/60">
+              
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold mb-1">1. إجمالي ما تم تحصيله من الزبائن (الطلبيات الموصلة):</span>
+                <span className="text-base font-black text-slate-100">{formatCurrency(financialMetrics.deliveredRevenue)}</span>
+                <span className="block text-[9px] text-emerald-400 mt-1 font-bold">
+                  ({financialMetrics.deliveredColisCount} طرد تم توصيله واستلام ثمنه)
+                </span>
+              </div>
+
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold mb-1">2. إجمالي الأموال المستلمة من شركة التوصيل (على دفعات):</span>
+                <span className="text-base font-black text-indigo-400">{formatCurrency(receivedFromDelivery)}</span>
+                <span className="block text-[9px] text-slate-400 mt-1 font-bold">
+                  (عبر {deliveryPayments.length} دفعة مسجلة في السجل أدناه)
+                </span>
+              </div>
+
+              <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col justify-center">
+                <span className="block text-[10px] text-slate-400 font-bold">3. المستحقات المتبقية في ذمة شركة التوصيل:</span>
+                <span className={`text-lg font-black mt-1 block ${
+                  (financialMetrics.deliveredRevenue - receivedFromDelivery) > 0 ? 'text-amber-500' : 'text-emerald-400'
+                }`}>
+                  {formatCurrency(Math.max(0, financialMetrics.deliveredRevenue - receivedFromDelivery))}
+                </span>
+                <span className="block text-[9px] text-slate-500 mt-0.5">الباقي = (المحصل للطلبيات الموصلة - مجموع الدفعات المستلمة)</span>
+              </div>
+
+            </div>
+
+            {/* Delivery Payments History & Add Form */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-4 border-t border-slate-800/60">
+              
+              {/* Form to Add Payment (5 columns) */}
+              <div className="lg:col-span-5 bg-slate-950/40 p-4 rounded-xl border border-slate-800/60 space-y-4">
+                <h4 className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-emerald-400" />
+                  <span>تسجيل دفعة مستلمة جديدة من شركة التوصيل</span>
+                </h4>
+
+                {deliveryPayError && (
+                  <p className="text-[11px] font-bold text-rose-400 bg-rose-500/10 p-2 rounded-lg border border-rose-500/10">
+                    {deliveryPayError}
+                  </p>
+                )}
+
+                <form onSubmit={handleAddDeliveryPayment} className="space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">قيمة الدفعة المستلمة (د.ج) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="مثال: 45000"
+                      value={newDeliveryPayAmount}
+                      onChange={(e) => setNewDeliveryPayAmount(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-left font-mono h-9"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">تاريخ استلام الدفعة *</label>
+                    <input
+                      type="date"
+                      required
+                      value={newDeliveryPayDate}
+                      onChange={(e) => setNewDeliveryPayDate(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-right font-mono h-9"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">رقم الفاتورة/البيان أو ملاحظة (اختياري)</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: دفعة كشف حساب رقم #1024"
+                      value={newDeliveryPayNote}
+                      onChange={(e) => setNewDeliveryPayNote(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-right h-9"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg py-2 flex items-center justify-center gap-1.5 text-xs font-bold transition-all cursor-pointer h-9"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة الدفعة لحساب الشركة</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* History list of payments (7 columns) */}
+              <div className="lg:col-span-7 bg-slate-950/20 p-4 rounded-xl border border-slate-800/40 space-y-3">
+                <h4 className="text-xs font-black text-slate-300 flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-emerald-400" />
+                  <span>سجل الدفعات المستلمة التاريخي ({deliveryPayments.length})</span>
+                </h4>
+
+                {deliveryPayments.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl bg-slate-950/20">
+                    لم يتم تسجيل أي دفعات مالية مستلمة من شركة التوصيل بعد.
+                  </div>
+                ) : (
+                  <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 font-sans">
+                    {deliveryPayments.map((p) => (
+                      <div
+                        key={p.id}
+                        className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-3 text-right"
+                      >
+                        <div>
+                          <span className="text-xs font-black text-emerald-400">{formatCurrency(p.amount)}</span>
+                          {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-slate-500 font-mono">{p.date}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDeliveryPayment(p.id)}
+                            className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/10 rounded-lg text-rose-400 transition-colors cursor-pointer"
+                            title="حذف الدفعة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* List of Delivered Sales for easy calculation / settlement */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black text-slate-300 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>الطلبيات الموصلة التي تقع في الفترة المحددة ({deliveryDeliveredBreakdown.length} طلبية):</span>
+              </h4>
+
+              {deliveryDeliveredBreakdown.length === 0 ? (
+                <div className="text-center py-6 text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+                  لا توجد مبيعات موصلة في هذه الفترة المحددة للتحصيل من شركة التوصيل.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+                  <table className="w-full text-right border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
+                        <th className="p-3">معلومات الطلبية والزبون</th>
+                        <th className="p-3 text-center">الولاية والبلدية</th>
+                        <th className="p-3 text-center">عدد الطرود</th>
+                        <th className="p-3 text-center">التاريخ</th>
+                        <th className="p-3 text-left">القيمة المحصلة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50 bg-slate-950/20">
+                      {deliveryDeliveredBreakdown.map((sale) => (
+                        <tr key={sale.id} className="hover:bg-slate-900/40 text-slate-300">
+                          <td className="p-3 font-bold">
+                            <span className="text-slate-200 block">{sale.customerName || 'زبون غير مسمى'}</span>
+                            <span className="block text-[10px] text-slate-500 mt-0.5">
+                              فاتورة: {sale.id} • هاتف: {sale.customerPhone || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center text-slate-400">
+                            {sale.customerState || 'N/A'} - {sale.customerMunicipality || 'N/A'}
+                          </td>
+                          <td className="p-3 text-center font-mono">
+                            {sale.customerColis || 1} طرد
+                          </td>
+                          <td className="p-3 text-center text-slate-400 font-mono">
+                            {sale.date.split('T')[0]}
+                          </td>
+                          <td className="p-3 text-left font-black text-emerald-400 font-mono">
+                            {formatCurrency(sale.totalPrice)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+      </div>
+
+      {/* 6. SVG Interactive Trend Chart */}
       <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
           <div>
