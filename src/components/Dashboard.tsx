@@ -90,14 +90,14 @@ export default function Dashboard({
     const totalParcels = sales.reduce((sum, s) => sum + (s.customerColis || 0), 0);
     const totalPackagingCost = totalParcels * packagingPrice;
 
-    // Delivery payments commission (1.2% or 120 DZD per 10,000 DZD received)
+    // Delivery payments commission (manual sum)
     let totalDeliveryCommission = 0;
     try {
       const saved = localStorage.getItem('delivery_payments_history');
       if (saved) {
         const deliveryPayments = JSON.parse(saved);
         if (Array.isArray(deliveryPayments)) {
-          totalDeliveryCommission = deliveryPayments.reduce((sum: number, p: any) => sum + (p.amount * 0.012), 0);
+          totalDeliveryCommission = deliveryPayments.reduce((sum: number, p: any) => sum + (p.commission ?? 0), 0);
         }
       }
     } catch (e) {

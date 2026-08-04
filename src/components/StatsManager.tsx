@@ -38,6 +38,7 @@ interface SupplierPayment {
 interface DeliveryPayment {
   id: string;
   amount: number;
+  commission?: number;
   date: string;
   note?: string;
 }
@@ -157,6 +158,7 @@ export default function StatsManager({
   
   // State for adding a new delivery payment
   const [newDeliveryPayAmount, setNewDeliveryPayAmount] = useState<string>('');
+  const [newDeliveryPayCommission, setNewDeliveryPayCommission] = useState<string>('');
   const [newDeliveryPayDate, setNewDeliveryPayDate] = useState<string>(getLocalDateString(new Date()));
   const [newDeliveryPayNote, setNewDeliveryPayNote] = useState<string>('');
   const [deliveryPayError, setDeliveryPayError] = useState<string>('');
@@ -166,11 +168,11 @@ export default function StatsManager({
   }, [deliveryPayments]);
 
   const receivedFromDeliveryCommission = useMemo(() => {
-    return deliveryPayments.reduce((sum, p) => sum + (p.amount * 0.012), 0);
+    return deliveryPayments.reduce((sum, p) => sum + (p.commission ?? 0), 0);
   }, [deliveryPayments]);
 
-  const receivedFromDeliveryNet = useMemo(() => {
-    return receivedFromDelivery - receivedFromDeliveryCommission;
+  const receivedFromDeliveryTotalSettled = useMemo(() => {
+    return receivedFromDelivery + receivedFromDeliveryCommission;
   }, [receivedFromDelivery, receivedFromDeliveryCommission]);
 
   const allTimeDeliveredRevenue = useMemo(() => {
@@ -193,9 +195,15 @@ export default function StatsManager({
       setDeliveryPayError('يرجى إدخال مبلغ صالح أكبر من 0.');
       return;
     }
+    const comm = parseFloat(newDeliveryPayCommission) || 0;
+    if (isNaN(comm) || comm < 0) {
+      setDeliveryPayError('يرجى إدخال عمولة صالحة أكبر من أو تساوي 0.');
+      return;
+    }
     const newPayment: DeliveryPayment = {
       id: 'delpay-' + Date.now(),
       amount: amt,
+      commission: comm,
       date: newDeliveryPayDate || getLocalDateString(new Date()),
       note: newDeliveryPayNote.trim() || undefined
     };
@@ -203,6 +211,7 @@ export default function StatsManager({
     setDeliveryPayments(updated);
     localStorage.setItem('delivery_payments_history', JSON.stringify(updated));
     setNewDeliveryPayAmount('');
+    setNewDeliveryPayCommission('');
     setNewDeliveryPayNote('');
     setNewDeliveryPayDate(getLocalDateString(new Date()));
   };
@@ -419,7 +428,7 @@ export default function StatsManager({
     });
 
     // Sum of commissions for delivery payments in the active period
-    const totalDeliveryCommission = filteredPeriodDeliveryPayments.reduce((sum, p) => sum + (p.amount * 0.012), 0);
+    const totalDeliveryCommission = filteredPeriodDeliveryPayments.reduce((sum, p) => sum + (p.commission ?? 0), 0);
 
     // Gross profits
     const totalPotentialProfit = totalGrossRevenue - totalBuyingCost; // Profit if all are delivered
@@ -921,8 +930,8 @@ export default function StatsManager({
               </div>
               <div className="flex justify-between items-center text-xs">
                 <div className="flex items-center gap-1">
-                  <span className="text-slate-400">عمولة شركة التوصيل للتحصيل:</span>
-                  <span className="text-[10px] text-rose-400 font-bold">(1.2% / 120 دج لكل 10,000)</span>
+                  <span className="text-slate-400">اقتطاعات وعمولة شركة التوصيل:</span>
+                  <span className="text-[10px] text-rose-400 font-bold">(المسجلة يدوياً)</span>
                 </div>
                 <span className="text-slate-200 font-bold">-{formatCurrency(financialMetrics.totalDeliveryCommission)}</span>
               </div>
@@ -1202,19 +1211,19 @@ export default function StatsManager({
               </div>
 
               <div className="space-y-2">
-                <span className="block text-[10px] text-indigo-400 font-bold">2. دفعات شركة التوصيل والعمولة (التحصيل):</span>
+                <span className="block text-[10px] text-indigo-400 font-bold">2. دفعات شركة التوصيل والعمولات:</span>
                 <div>
-                  <span className="text-xs text-slate-400 block">الدفعات المسجلة (الخام):</span>
-                  <span className="text-base font-black text-indigo-400">{formatCurrency(receivedFromDelivery)}</span>
+                  <span className="text-xs text-slate-400 block">إجمالي الصافي المستلم:</span>
+                  <span className="text-base font-black text-emerald-400">{formatCurrency(receivedFromDelivery)}</span>
                 </div>
                 <div className="pt-1.5 border-t border-slate-800/40 space-y-1">
                   <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span>نسبة الشركة (1.2%):</span>
+                    <span>إجمالي العمولات المقتطعة:</span>
                     <span className="text-rose-400 font-bold">-{formatCurrency(receivedFromDeliveryCommission)}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-slate-800/20">
-                    <span>الصافي المستلم فعلياً:</span>
-                    <span className="text-emerald-400 font-black">{formatCurrency(receivedFromDeliveryNet)}</span>
+                    <span>إجمالي المسوى من الحساب:</span>
+                    <span className="text-indigo-400 font-black">{formatCurrency(receivedFromDeliveryTotalSettled)}</span>
                   </div>
                 </div>
               </div>
@@ -1223,12 +1232,12 @@ export default function StatsManager({
                 <div>
                   <span className="block text-[10px] text-slate-400 font-bold">3. المستحقات المتبقية في ذمة شركة التوصيل:</span>
                   <span className={`text-lg font-black mt-1 block ${
-                    (allTimeDeliveredRevenue - receivedFromDelivery) > 0 ? 'text-amber-500' : 'text-emerald-400'
+                    (allTimeDeliveredRevenue - receivedFromDeliveryTotalSettled) > 0 ? 'text-amber-500' : 'text-emerald-400'
                   }`}>
-                    {formatCurrency(Math.max(0, allTimeDeliveredRevenue - receivedFromDelivery))}
+                    {formatCurrency(Math.max(0, allTimeDeliveredRevenue - receivedFromDeliveryTotalSettled))}
                   </span>
                 </div>
-                <span className="block text-[9px] text-slate-500 mt-2">الباقي = (إجمالي كل المبيعات الموصلة - إجمالي الدفعات المسجلة)</span>
+                <span className="block text-[9px] text-slate-500 mt-2">الباقي = (إجمالي المبيعات الموصلة - إجمالي المسوى [الصافي المستلم + المقتطعات])</span>
               </div>
 
             </div>
@@ -1251,7 +1260,7 @@ export default function StatsManager({
 
                 <form onSubmit={handleAddDeliveryPayment} className="space-y-3.5">
                   <div>
-                    <label className="block text-[10px] text-slate-400 font-bold mb-1">قيمة الدفعة المستلمة (د.ج) *</label>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">المبلغ الصافي المستلم فعلياً (د.ج) *</label>
                     <input
                       type="number"
                       required
@@ -1261,6 +1270,19 @@ export default function StatsManager({
                       onChange={(e) => setNewDeliveryPayAmount(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-left font-mono h-9"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">المبلغ المقتطع (العمولة / مصاريف التوصيل) د.ج</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="مثال: 540"
+                      value={newDeliveryPayCommission}
+                      onChange={(e) => setNewDeliveryPayCommission(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-slate-100 outline-hidden focus:ring-1 focus:ring-indigo-500 text-left font-mono h-9"
+                    />
+                    <span className="block text-[8.5px] text-slate-500 mt-0.5">اتركها فارغة أو 0 إذا لم يكن هناك اقتطاع.</span>
                   </div>
 
                   <div>
@@ -1307,7 +1329,7 @@ export default function StatsManager({
                     لم يتم تسجيل أي دفعات مالية مستلمة من شركة التوصيل بعد.
                   </div>
                 ) : (
-                  <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 font-sans">
+                  <div className="max-h-[260px] overflow-y-auto space-y-2 pr-1 font-sans">
                     {deliveryPayments.map((p) => (
                       <div
                         key={p.id}
@@ -1316,12 +1338,12 @@ export default function StatsManager({
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-black text-emerald-400">{formatCurrency(p.amount)}</span>
-                            <span className="text-[9px] text-slate-500">(الدفعة الإجمالية)</span>
+                            <span className="text-[9px] text-slate-500">(الصافي المستلم)</span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5 text-[9px] text-slate-400">
-                            <span className="text-rose-400 font-bold">العمولة (1.2%): -{formatCurrency(p.amount * 0.012)}</span>
+                            <span className="text-rose-400 font-bold">الاقتطاع / العمولة: -{formatCurrency(p.commission ?? 0)}</span>
                             <span>•</span>
-                            <span className="text-emerald-400 font-bold">الصافي: {formatCurrency(p.amount - p.amount * 0.012)}</span>
+                            <span className="text-indigo-400 font-bold">المسوى الكلي: {formatCurrency(p.amount + (p.commission ?? 0))}</span>
                           </div>
                           {p.note && <p className="text-[10px] text-slate-400 mt-1 font-sans">{p.note}</p>}
                         </div>
