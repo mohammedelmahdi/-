@@ -77,7 +77,8 @@ export interface PackagingPayment {
 
 export type ViewType = 'dashboard' | 'stock' | 'sales' | 'expenses' | 'stats';
 
-export const formatCurrency = (amount: number): string => {
-  return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} د.ج`;
+export const formatCurrency = (amount: number | undefined | null): string => {
+  const safeAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 0;
+  return `${safeAmount.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} د.ج`;
 };
 

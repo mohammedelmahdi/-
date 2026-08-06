@@ -1270,19 +1270,19 @@ export default function SalesManager({
                                     <span className="text-[10px] text-slate-500 font-mono">#{idx + 1}</span>
                                     {item.productName}
                                   </span>
-                                  <span className="font-extrabold text-emerald-400 font-mono">{formatCurrency(item.subtotal)}</span>
+                                  <span className="font-extrabold text-emerald-400 font-mono">{formatCurrency(item.totalPrice)}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
                                   {item.sellType === 'carton' ? (
                                     <span className="inline-flex items-center gap-1 bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-bold">
-                                      📦 {item.cartonsSold} كرتون ({item.pairsSold || item.totalPairs} زوج)
+                                      📦 {item.cartonsQuantity || 0} كرتون ({item.quantity} زوج)
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded border border-purple-500/20 font-bold">
-                                      👟 {item.totalPairs} زوج / قطعة
+                                      👟 {item.pairsQuantity || item.quantity} زوج / قطعة
                                     </span>
                                   )}
-                                  <span className="text-slate-400">الوحدة: {formatCurrency(item.unitPrice)}</span>
+                                  <span className="text-slate-400">الوحدة: {formatCurrency(item.sellingPriceAtSale)}</span>
                                 </div>
                               </div>
                             ))
@@ -1571,11 +1571,11 @@ export default function SalesManager({
                                         </div>
                                         <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800/80">
                                           <span className="text-indigo-300 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 text-[11px]">
-                                            {item.sellType === 'carton' ? `📦 ${item.cartonsSold} كرتون (${item.pairsSold || item.totalPairs} زوج)` : `👟 ${item.totalPairs} زوج / قطعة`}
+                                            {item.sellType === 'carton' ? `📦 ${item.cartonsQuantity || 0} كرتون (${item.quantity} زوج)` : `👟 ${item.pairsQuantity || item.quantity} زوج / قطعة`}
                                           </span>
                                           <div className="text-left">
                                             <span className="text-[10px] text-slate-500 block">المجموع</span>
-                                            <span className="font-mono font-bold text-emerald-400">{formatCurrency(item.subtotal)}</span>
+                                            <span className="font-mono font-bold text-emerald-400">{formatCurrency(item.totalPrice)}</span>
                                           </div>
                                         </div>
                                       </div>
