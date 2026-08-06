@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Product, Sale, Expense, formatCurrency } from '../types';
 import { motion } from 'motion/react';
 import { 
@@ -9,7 +9,12 @@ import {
   ChevronRight, 
   ArrowUpRight, 
   ShoppingCart,
-  Calendar
+  Calendar,
+  HelpCircle,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  BookOpen
 } from 'lucide-react';
 
 // Helper to get YYYY-MM-DD format in the user's local timezone
@@ -39,6 +44,7 @@ export default function Dashboard({
   onNavigateToSales,
   onViewReceipt 
 }: DashboardProps) {
+  const [showFinancialGuide, setShowFinancialGuide] = useState(false);
 
   // 1. Calculate Key Metrics
   const metrics = useMemo(() => {
@@ -269,13 +275,16 @@ export default function Dashboard({
           </div>
         </motion.div>
 
-        {/* Metric Card: Bénéfice Net Réalisé */}
+        {/* Metric Card: أرباح السلع الموصلة */}
         <motion.div 
           whileHover={{ y: -3 }}
           className="bg-slate-900 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between min-h-[115px] sm:min-h-[140px]"
         >
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[11px] sm:text-sm font-semibold text-slate-400 truncate">إجمالي الأرباح</span>
+            <span className="text-[11px] sm:text-sm font-semibold text-slate-400 truncate flex items-center gap-1">
+              <span>أرباح السلع الموصلة</span>
+              <HelpCircle className="w-3.5 h-3.5 text-slate-500 shrink-0 hidden sm:inline" title="مجموع (سعر البيع - سعر الشراء) للطلبات التي استلمها الزبائن بالفعل" />
+            </span>
             <div className="p-1.5 sm:p-2.5 bg-emerald-500/10 rounded-lg sm:rounded-xl text-emerald-400 font-bold shrink-0">
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
@@ -284,7 +293,10 @@ export default function Dashboard({
             <span className={`text-base sm:text-xl md:text-2xl font-extrabold block truncate ${metrics.totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {formatCurrency(metrics.totalProfit)}
             </span>
-            <p className="text-[10px] sm:text-xs text-slate-500 mt-1 truncate">عند التوصيل فقط 🚚</p>
+            <div className="text-[9px] text-slate-400 mt-1 space-y-0.5 font-medium truncate">
+              <p className="text-slate-500 text-[8.5px] truncate">الأرباح قبل خصم المصاريف والتغليف 📦</p>
+              <p className="text-[8.5px] text-emerald-500/80 font-bold truncate">سعر البيع - الشراء فقط 🚚</p>
+            </div>
           </div>
         </motion.div>
 
@@ -294,7 +306,10 @@ export default function Dashboard({
           className="bg-slate-900 p-3.5 sm:p-5 rounded-2xl border border-slate-800/80 shadow-xl flex flex-col justify-between min-h-[115px] sm:min-h-[140px]"
         >
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[11px] sm:text-sm font-bold text-slate-400 truncate">صافي الأرباح</span>
+            <span className="text-[11px] sm:text-sm font-bold text-slate-400 truncate flex items-center gap-1">
+              <span>صافي الأرباح الكلي</span>
+              <HelpCircle className="w-3.5 h-3.5 text-slate-500 shrink-0 hidden sm:inline" title="الأرباح المتبقية بعد طرح المصاريف، أكياس التغليف، وعمولات التوصيل" />
+            </span>
             <div className="p-1.5 sm:p-2 bg-indigo-500/10 rounded-lg text-indigo-400 shrink-0">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
@@ -320,7 +335,10 @@ export default function Dashboard({
             صافي الربح الفعلي
           </div>
           <div className="flex items-center justify-between gap-1 mt-2">
-            <span className="text-[11px] sm:text-sm font-black text-emerald-400 truncate">الصافي الحالي</span>
+            <span className="text-[11px] sm:text-sm font-black text-emerald-400 truncate flex items-center gap-1">
+              <span>الصافي الحالي في الجيب</span>
+              <HelpCircle className="w-3.5 h-3.5 text-emerald-300 shrink-0 hidden sm:inline" title="الأرباح الصافية المتوفرة كسيولة فعلية في يدك بعد استبعاد المبالغ العالقة قيد السحب عند شركة التوصيل" />
+            </span>
             <div className="p-1.5 sm:p-2 bg-emerald-500/20 rounded-lg text-emerald-300 font-black shrink-0">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
@@ -332,7 +350,7 @@ export default function Dashboard({
             <div className="text-[9px] text-slate-400 mt-1 space-y-0.5 font-medium truncate">
               <p>الصافي المستلم: <span className="text-emerald-400 font-bold">{formatCurrency(metrics.receivedFromDelivery)}</span></p>
               <p>بانتظار السحب: <span className="text-amber-500 font-bold">{formatCurrency(metrics.remainingWithDelivery)}</span></p>
-              <p className="text-slate-500 text-[8.5px] mt-0.5 font-sans">بعد التكلفة والمصاريف 💰</p>
+              <p className="text-slate-500 text-[8.5px] mt-0.5 font-sans">السيولة الحقيقية المتوفرة حالياً 💰</p>
             </div>
           </div>
         </motion.div>
@@ -361,6 +379,85 @@ export default function Dashboard({
             </div>
           </div>
         </motion.div>
+      </div>
+
+      {/* Financial Guide Accordion to explain metrics and remove confusion */}
+      <div className="bg-slate-950/40 border border-slate-800/80 p-4 rounded-2xl">
+        <button
+          onClick={() => setShowFinancialGuide(!showFinancialGuide)}
+          className="w-full flex items-center justify-between text-right text-slate-200 hover:text-white transition-colors cursor-pointer group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg group-hover:bg-emerald-500/20 transition-all shrink-0">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div className="text-right">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-200">💡 هل تشعر بتداخل أو خلط في أرقام الأرباح؟ اضغط هنا لفهم طريقة الحساب بالتفصيل</h4>
+              <p className="text-[10px] text-slate-400 mt-0.5">شرح تفصيلي مبسط للعلاقة بين أرباح السلع، الربح الصافي، والسيولة الفعلية في جيبك</p>
+            </div>
+          </div>
+          <div className="text-slate-400 group-hover:text-slate-200 transition-colors shrink-0 mr-2">
+            {showFinancialGuide ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        </button>
+
+        {showFinancialGuide && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            transition={{ duration: 0.2 }}
+            className="mt-4 pt-4 border-t border-slate-800/60 space-y-4 text-xs leading-relaxed text-slate-300 text-right"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-900/55 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-bold justify-start flex-row-reverse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span>1. أرباح السلع الموصلة (إجمالي)</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed text-right">
+                  هذا هو <strong>الربح الخام للمبيعات الموصلة بالفعل</strong>. يمثل سعر بيع المنتج للزبون مطروحاً منه سعر شرائه الأصلي من المورد. لا نخصم منه هنا أي مصاريف إضافية.
+                </p>
+                <div className="pt-2 border-t border-slate-800/40 text-[10px] text-slate-400 font-mono text-right">
+                  الحساب: <span className="text-emerald-400">سعر البيع - تكلفة الشراء للسلع الموصلة</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/55 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-indigo-400 font-bold justify-start flex-row-reverse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                  <span>2. صافي الأرباح الكلي للنشاط</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed text-right">
+                  هذا يمثل <strong>الربح الحقيقي الصافي لمشروعك بأكمله</strong>. نأخذ فيه بعين الاعتبار جميع المصاريف الجانبية التي دفعتها من جيبك للتغليف والعمل والعمولات والمصاريف العامة.
+                </p>
+                <div className="pt-2 border-t border-slate-800/40 text-[10px] text-slate-400 font-mono text-right">
+                  الحساب: <span className="text-indigo-400">أرباح السلع - المصاريف - التغليف - العمولات</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/55 p-3.5 rounded-xl border border-emerald-500/20 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold justify-start flex-row-reverse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span>3. الصافي الحالي في الجيب</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed text-right">
+                  هذه هي <strong>السيولة الحالية المتاحة في يدك الآن</strong>. يتم حسابها بطرح المبالغ التي لا تزال عالقة عند شركة التوصيل (التي استلمها الزبون ولكن لم تسحبها بعد) من الربح الصافي الكلي.
+                </p>
+                <div className="pt-2 border-t border-slate-800/40 text-[10px] text-slate-400 font-mono text-right">
+                  الحساب: <span className="text-emerald-300">الربح الصافي - المبالغ العالقة عند التوصيل</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-emerald-950/20 border border-emerald-900/40 p-3 rounded-xl text-[11px] text-emerald-300 flex items-start gap-2 text-right">
+              <Info className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+              <div>
+                <strong>مثال عملي مبسط:</strong> إذا بلغت أرباح سلعك الموصلة 4,000 دج، ومصاريفك 500 دج، وتغليفك 100 دج، وعمولة التوصيل 800 دج.
+                فإن <strong>صافي ربحك الكلي للنشاط</strong> هو 2,600 دج. لكن إذا كانت الـ 10,000 دج (قيمة السلعة بالتوصيل) ما زالت عند شركة التوصيل ولم تسحبها بعد، فإن سيولتك الحالية تكون سالبة لأنك دفعت تكاليف الشراء والمصاريف مسبقاً، وسترتفع لتصبح 2,600 دج بمجرد استلام أموالك من شركة التوصيل وتأكيد السحب!
+              </div>
+            </div>
+          </motion.div>
+        )}
       </div>
 
       {/* Main Content Layout Grid */}
