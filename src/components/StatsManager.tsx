@@ -563,11 +563,11 @@ export default function StatsManager({
   // Order count tracking by status (تتبع أعداد الطلبيات حسب حالتها)
   const orderStatusTracking = useMemo(() => {
     const tracking = {
-      pending: { count: 0, revenue: 0, colis: 0, profit: 0 },
-      shipped: { count: 0, revenue: 0, colis: 0, profit: 0 },
-      delivered: { count: 0, revenue: 0, colis: 0, profit: 0 },
-      returned: { count: 0, revenue: 0, colis: 0, profit: 0 },
-      total: { count: 0, revenue: 0, colis: 0, profit: 0 }
+      pending: { count: 0, revenue: 0, colis: 0, profit: 0, buyingCost: 0 },
+      shipped: { count: 0, revenue: 0, colis: 0, profit: 0, buyingCost: 0 },
+      delivered: { count: 0, revenue: 0, colis: 0, profit: 0, buyingCost: 0 },
+      returned: { count: 0, revenue: 0, colis: 0, profit: 0, buyingCost: 0 },
+      total: { count: 0, revenue: 0, colis: 0, profit: 0, buyingCost: 0 }
     };
 
     filteredSales.forEach(sale => {
@@ -601,28 +601,33 @@ export default function StatsManager({
       tracking.total.revenue += rev;
       tracking.total.colis += col;
       tracking.total.profit += saleProfit;
+      tracking.total.buyingCost += buyingCost;
 
       if (status === 'delivered') {
         tracking.delivered.count += 1;
         tracking.delivered.revenue += rev;
         tracking.delivered.colis += col;
         tracking.delivered.profit += saleProfit;
+        tracking.delivered.buyingCost += buyingCost;
       } else if (status === 'shipped') {
         tracking.shipped.count += 1;
         tracking.shipped.revenue += rev;
         tracking.shipped.colis += col;
         tracking.shipped.profit += saleProfit;
+        tracking.shipped.buyingCost += buyingCost;
       } else if (status === 'returned') {
         tracking.returned.count += 1;
         tracking.returned.revenue += rev;
         tracking.returned.colis += col;
         // Sunk packaging cost loss for returned items
         tracking.returned.profit -= col * packagingPrice;
+        tracking.returned.buyingCost += buyingCost;
       } else {
         tracking.pending.count += 1;
         tracking.pending.revenue += rev;
         tracking.pending.colis += col;
         tracking.pending.profit += saleProfit;
+        tracking.pending.buyingCost += buyingCost;
       }
     });
 
@@ -1571,8 +1576,12 @@ export default function StatsManager({
               
               <div className="pt-2 border-t border-slate-800/60 space-y-1">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400 font-bold">المداخيل:</span>
+                  <span className="text-slate-400">قيمة البيع (المداخيل):</span>
                   <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.delivered.revenue)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-400">قيمة الشراء (تكلفة السلع):</span>
+                  <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.delivered.buyingCost)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[11px]">
                   <span className="text-emerald-400 font-bold">الفائدة المحققة:</span>
@@ -1600,11 +1609,15 @@ export default function StatsManager({
               
               <div className="pt-2 border-t border-slate-800/60 space-y-1">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400 font-bold">مداخيل في الطريق:</span>
+                  <span className="text-slate-400">قيمة البيع (في الطريق):</span>
                   <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.shipped.revenue)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-blue-400 font-bold">الفائدة في الطريق:</span>
+                  <span className="text-slate-400">قيمة الشراء (تكلفة السلع):</span>
+                  <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.shipped.buyingCost)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-blue-400 font-bold">الفائدة المتوقعة:</span>
                   <span className="font-black text-blue-400">{formatCurrency(orderStatusTracking.shipped.profit)}</span>
                 </div>
               </div>
@@ -1629,8 +1642,12 @@ export default function StatsManager({
               
               <div className="pt-2 border-t border-slate-800/60 space-y-1">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400 font-bold">المداخيل المتوقعة:</span>
+                  <span className="text-slate-400">قيمة البيع (المتوقعة):</span>
                   <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.pending.revenue)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-400">قيمة الشراء (تكلفة السلع):</span>
+                  <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.pending.buyingCost)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[11px]">
                   <span className="text-amber-400 font-bold">الفائدة التقديرية:</span>
@@ -1658,8 +1675,12 @@ export default function StatsManager({
               
               <div className="pt-2 border-t border-slate-800/60 space-y-1">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400 font-bold">قيمة المرتجعات:</span>
+                  <span className="text-slate-400">قيمة البيع الملغاة:</span>
                   <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.returned.revenue)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-400">قيمة الشراء المسترجعة:</span>
+                  <span className="font-extrabold text-slate-300">{formatCurrency(orderStatusTracking.returned.buyingCost)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[11px]">
                   <span className="text-rose-400 font-bold">خسائر التغليف والتوصيل:</span>

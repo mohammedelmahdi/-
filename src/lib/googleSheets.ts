@@ -42,6 +42,10 @@ export const initAuth = (
 
 // Google sign-in
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+  if (isSigningIn) {
+    console.log('Sign-in already in progress');
+    return null;
+  }
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
@@ -85,7 +89,14 @@ export const createDatabaseSpreadsheet = async (accessToken: string): Promise<st
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create spreadsheet: ${response.statusText}`);
+      let errMsg = response.statusText;
+      try {
+        const errJson = await response.json();
+        if (errJson.error?.message) {
+          errMsg = errJson.error.message;
+        }
+      } catch (_) {}
+      throw new Error(errMsg || `Failed to create spreadsheet: ${response.status}`);
     }
 
     const data = await response.json();
@@ -107,7 +118,7 @@ const initializeSheetHeaders = async (accessToken: string, spreadsheetId: string
     ['ID', 'SKU', 'الاسم (Name)', 'التصنيف (Category)', 'الكمية الكلية بالأزواج (Total Pairs)', 'عدد الكراتين (Cartons Count)', 'عدد الأزواج في الكرتون (Pairs per Carton)', 'سعر الشراء للزوج (Pair Buying Price)', 'سعر البيع للزوج (Pair Selling Price)', 'سعر شراء الكرتون (Carton Buying Price)', 'سعر بيع الكرتون (Carton Selling Price)', 'رابط الصورة (Image URL)', 'تاريخ التحديث (Updated At)']
   ];
 
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المخزون (Products)'!A1:M1")}?valueInputOption=USER_ENTERED`, {
+  const res1 = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المخزون (Products)'!A1:M1")}?valueInputOption=USER_ENTERED`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -116,12 +127,23 @@ const initializeSheetHeaders = async (accessToken: string, spreadsheetId: string
     body: JSON.stringify({ values: productsHeaders })
   });
 
+  if (!res1.ok) {
+    let errMsg = res1.statusText;
+    try {
+      const errJson = await res1.json();
+      if (errJson.error?.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (_) {}
+    throw new Error(errMsg || `Failed to write Products headers: ${res1.status}`);
+  }
+
   // Write headers for Sales
   const salesHeaders = [
     ['معرف البيع (Sale ID)', 'التاريخ (Date)', 'اسم الموديل (Model Name)', 'الكمية الكلية بالأزواج (Total Pairs Sold)', 'المبلغ الإجمالي (Total Paid)', 'نوع البيع (Sell Type)', 'الكراتين المباعة (Cartons Quantity)', 'الأزواج المباعة (Pairs Quantity)', 'المنتجات الفرعية (Sub Items)', 'اسم الزبون (Customer Name)', 'رقم الهاتف (Phone)', 'الولاية (State/Wilaya)', 'البلدية (Municipality/Baladiya)', 'عدد الكوليات (Number of Parcels)', 'كود تتبع التوصيل (Tracking Code)', 'حالة الطلب (Order Status)']
   ];
 
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A1:P1")}?valueInputOption=USER_ENTERED`, {
+  const res2 = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A1:P1")}?valueInputOption=USER_ENTERED`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -129,6 +151,17 @@ const initializeSheetHeaders = async (accessToken: string, spreadsheetId: string
     },
     body: JSON.stringify({ values: salesHeaders })
   });
+
+  if (!res2.ok) {
+    let errMsg = res2.statusText;
+    try {
+      const errJson = await res2.json();
+      if (errJson.error?.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (_) {}
+    throw new Error(errMsg || `Failed to write Sales headers: ${res2.status}`);
+  }
 };
 
 // Sync Products to Google Sheet

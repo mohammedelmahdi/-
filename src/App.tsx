@@ -110,6 +110,8 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [isMobileSyncOpen, setIsMobileSyncOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [sheetError, setSheetError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // 1. Initial State Load from localStorage and listen to Auth
   useEffect(() => {
@@ -235,6 +237,8 @@ export default function App() {
   };
 
   const handleGoogleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     setAuthError(null);
     try {
       const result = await googleSignIn();
@@ -261,23 +265,33 @@ export default function App() {
       } else if (errCode === 'auth/popup-closed-by-user' || errMsg.includes('popup-closed-by-user')) {
         setAuthError('تنبيه: تم إغلاق النافذة قبل إتمام تسجيل الدخول. لحل المشكلة، يرجى فتح التطبيق في علامة تبويب جديدة ثم المحاولة مجدداً.');
       } else if (errCode === 'auth/cancelled-popup-request' || errMsg.includes('cancelled-popup-request')) {
-        setAuthError('تنبيه: تم حظر النافذة أو إلغاء الطلب من المتصفح (Iframe). يرجى فتح التطبيق في علامة تبويب جديدة وتفعيل السماح بالنوافذ المنبثقة.');
+        setAuthError('تنبيه: تم إلغاء الطلب أو حظر النافذة المنبثقة من المتصفح (Iframe). يرجى الضغط على زر "افتح التطبيق في علامة تبويب جديدة" بالأسفل وتجربة تسجيل الدخول هناك لتفادي قيود المتصفح على النوافذ داخل الإطارات.');
       } else {
         setAuthError(`حدث خطأ أثناء تسجيل الدخول: ${errMsg || 'يرجى تجربة فتح التطبيق في علامة تبويب جديدة والتأكد من السماح بالنوافذ المنبثقة (Popups).'}`);
       }
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
   const handleCreateSheetDb = async () => {
     if (!googleToken) return;
     setIsSyncing(true);
+    setSheetError(null);
     try {
       const newSheetId = await createDatabaseSpreadsheet(googleToken);
       setSheetId(newSheetId);
       localStorage.setItem('gestock_google_sheet_id', newSheetId);
       await handleForceSync(googleToken, newSheetId);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create sheet database:', err);
+      const errMsg = err?.message || 'فشل الاتصال بـ Google Sheets API.';
+      
+      if (errMsg.includes('sheets.googleapis.com') || errMsg.includes('disabled') || errMsg.includes('not been used in project')) {
+        setSheetError(`تنبيه هام: لم يتم تفعيل "Google Sheets API" لمشروع Firebase الخاص بك (${firebaseConfig.projectId || 'g-stock-cb294'}). يرجى الانتقال إلى Google Cloud Console لتفعيلها لكي يتمكن التطبيق من إنشاء قاعدة البيانات.`);
+      } else {
+        setSheetError(`فشل إنشاء قاعدة البيانات: ${errMsg}`);
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -612,13 +626,17 @@ export default function App() {
             <div className="space-y-2">
               <button
                 onClick={handleGoogleLogin}
-                className="w-full flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-slate-100 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer"
+                disabled={isLoggingIn}
+                className="w-full flex items-center justify-center gap-2 bg-white text-slate-900 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer"
               >
-                {/* Google colorful logo */}
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.478 0-6.3-2.823-6.3-6.3s2.822-6.3 6.3-6.3c1.543 0 2.943.557 4.029 1.472l3.128-3.128C19.114 2.129 15.9.9 12.24.9 6.086.9.9 6.086.9 12.24s5.186 11.34 11.34 11.34c6.243 0 11.34-5.097 11.34-11.34 0-.771-.086-1.5-.214-2.186H12.24z"/>
-                </svg>
-                <span>ربط حساب Google</span>
+                {isLoggingIn ? (
+                  <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.478 0-6.3-2.823-6.3-6.3s2.822-6.3 6.3-6.3c1.543 0 2.943.557 4.029 1.472l3.128-3.128C19.114 2.129 15.9.9 12.24.9 6.086.9.9 6.086.9 12.24s5.186 11.34 11.34 11.34c6.243 0 11.34-5.097 11.34-11.34 0-.771-.086-1.5-.214-2.186H12.24z"/>
+                  </svg>
+                )}
+                <span>{isLoggingIn ? 'جاري الاتصال...' : 'ربط حساب Google'}</span>
               </button>
               
               {authError && (
@@ -657,14 +675,30 @@ export default function App() {
               </div>
 
               {!sheetId ? (
-                <button
-                  onClick={handleCreateSheetDb}
-                  disabled={isSyncing}
-                  className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-3 py-2 rounded-xl font-bold text-[11px] transition-all cursor-pointer shadow-md disabled:opacity-55"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
-                  <span>{isSyncing ? 'جاري الإنشاء...' : 'إنشاء قاعدة بيانات Sheets'}</span>
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleCreateSheetDb}
+                    disabled={isSyncing}
+                    className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-3 py-2 rounded-xl font-bold text-[11px] transition-all cursor-pointer shadow-md disabled:opacity-55"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                    <span>{isSyncing ? 'جاري الإنشاء...' : 'إنشاء قاعدة بيانات Sheets'}</span>
+                  </button>
+                  {sheetError && (
+                    <div className="bg-rose-950/40 border border-rose-900/50 p-2.5 rounded-xl space-y-2 text-right">
+                      <p className="text-[10px] text-rose-300 leading-relaxed font-bold break-words">{sheetError}</p>
+                      <a
+                        href={`https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=${firebaseConfig.projectId || 'g-stock-cb294'}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer text-center"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>تفعيل Google Sheets API</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-1.5">
                   <div className="flex gap-1.5">
@@ -896,12 +930,17 @@ export default function App() {
                 <div className="space-y-3">
                   <button
                     onClick={handleGoogleLogin}
-                    className="w-full flex items-center justify-center gap-2.5 bg-white text-slate-900 hover:bg-slate-100 px-4 py-3 rounded-xl font-extrabold text-xs transition-all shadow-lg cursor-pointer"
+                    disabled={isLoggingIn}
+                    className="w-full flex items-center justify-center gap-2.5 bg-white text-slate-900 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-3 rounded-xl font-extrabold text-xs transition-all shadow-lg cursor-pointer"
                   >
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                      <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.478 0-6.3-2.823-6.3-6.3s2.822-6.3 6.3-6.3c1.543 0 2.943.557 4.029 1.472l3.128-3.128C19.114 2.129 15.9.9 12.24.9 6.086.9.9 6.086.9 12.24s5.186 11.34 11.34 11.34c6.243 0 11.34-5.097 11.34-11.34 0-.771-.086-1.5-.214-2.186H12.24z"/>
-                    </svg>
-                    <span>ربط حساب Google</span>
+                    {isLoggingIn ? (
+                      <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                    ) : (
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                        <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.478 0-6.3-2.823-6.3-6.3s2.822-6.3 6.3-6.3c1.543 0 2.943.557 4.029 1.472l3.128-3.128C19.114 2.129 15.9.9 12.24.9 6.086.9.9 6.086.9 12.24s5.186 11.34 11.34 11.34c6.243 0 11.34-5.097 11.34-11.34 0-.771-.086-1.5-.214-2.186H12.24z"/>
+                      </svg>
+                    )}
+                    <span>{isLoggingIn ? 'جاري الاتصال...' : 'ربط حساب Google'}</span>
                   </button>
                   
                   {authError && (
@@ -950,14 +989,30 @@ export default function App() {
 
                   {/* Actions depending on sheet creation */}
                   {!sheetId ? (
-                    <button
-                      onClick={handleCreateSheetDb}
-                      disabled={isSyncing}
-                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-md disabled:opacity-55"
-                    >
-                      <FileSpreadsheet className="w-4 h-4 shrink-0" />
-                      <span>{isSyncing ? 'جاري إنشاء جدول البيانات...' : 'إنشاء قاعدة بيانات Google Sheets'}</span>
-                    </button>
+                    <div className="space-y-3">
+                      <button
+                        onClick={handleCreateSheetDb}
+                        disabled={isSyncing}
+                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-md disabled:opacity-55"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 shrink-0" />
+                        <span>{isSyncing ? 'جاري إنشاء جدول البيانات...' : 'إنشاء قاعدة بيانات Google Sheets'}</span>
+                      </button>
+                      {sheetError && (
+                        <div className="bg-rose-950/40 border border-rose-900/50 p-3.5 rounded-xl space-y-2.5 text-right">
+                          <p className="text-xs text-rose-300 leading-relaxed font-bold break-words">{sheetError}</p>
+                          <a
+                            href={`https://console.developers.google.com/apis/api/sheets.googleapis.com/overview?project=${firebaseConfig.projectId || 'g-stock-cb294'}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center shadow"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>تفعيل Google Sheets API</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-3">
                       <div className="flex gap-2">
