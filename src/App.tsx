@@ -29,6 +29,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { User } from 'firebase/auth';
+import firebaseConfig from '../firebase-applet-config.json';
 import { 
   initAuth, 
   googleSignIn, 
@@ -254,13 +255,15 @@ export default function App() {
       const errCode = err?.code || '';
       
       if (errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain') || errMsg.includes('unauthorized')) {
-        setAuthError('خطأ: النطاق الحالي (g-stoc.netlify.app) غير مصرح به لعمليات تسجيل الدخول في Firebase. يرجى إضافته إلى قائمة "المجالات المصرح بها" (Authorized domains) في إعدادات Firebase Console الخاص بـ Authentication.');
+        setAuthError(`خطأ: النطاق الحالي (${window.location.hostname}) غير مصرح به لعمليات تسجيل الدخول في Firebase. يرجى إضافة هذا النطاق إلى قائمة "المجالات المصرح بها" (Authorized domains) في إعدادات Firebase Console الخاص بـ Authentication.`);
+      } else if (errCode === 'auth/configuration-not-found' || errMsg.includes('configuration-not-found')) {
+        setAuthError(`تنبيه هام: لم يتم تفعيل تسجيل الدخول باستخدام Google في مشروع Firebase الخاص بك (${firebaseConfig.projectId || 'g-stock-cb294'}). يرجى الانتقال إلى لوحة تحكم Firebase Console -> Authentication -> Sign-in method وتفعيل موفر "Google" والضغط على حفظ.`);
       } else if (errCode === 'auth/popup-closed-by-user' || errMsg.includes('popup-closed-by-user')) {
         setAuthError('تنبيه: تم إغلاق النافذة قبل إتمام تسجيل الدخول. لحل المشكلة، يرجى فتح التطبيق في علامة تبويب جديدة ثم المحاولة مجدداً.');
       } else if (errCode === 'auth/cancelled-popup-request' || errMsg.includes('cancelled-popup-request')) {
         setAuthError('تنبيه: تم حظر النافذة أو إلغاء الطلب من المتصفح (Iframe). يرجى فتح التطبيق في علامة تبويب جديدة وتفعيل السماح بالنوافذ المنبثقة.');
       } else {
-        setAuthError('حدث خطأ أثناء تسجيل الدخول: يرجى تجربة فتح التطبيق في علامة تبويب جديدة والتأكد من السماح بالنوافذ المنبثقة (Popups).');
+        setAuthError(`حدث خطأ أثناء تسجيل الدخول: ${errMsg || 'يرجى تجربة فتح التطبيق في علامة تبويب جديدة والتأكد من السماح بالنوافذ المنبثقة (Popups).'}`);
       }
     }
   };

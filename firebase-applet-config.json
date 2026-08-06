@@ -1,11 +1,11 @@
 {
-  "projectId": "stoked-airport-h4dh4",
-  "appId": "1:932838880721:web:6bf897eb51e0fa792adcf0",
-  "apiKey": "AIzaSyBNKx3HqF7UM7oUW88umKUAuZ9c0d3b8No",
-  "authDomain": "stoked-airport-h4dh4.firebaseapp.com",
-  "storageBucket": "stoked-airport-h4dh4.firebasestorage.app",
-  "messagingSenderId": "932838880721",
-  "measurementId": "",
-  "oAuthClientId": "932838880721-approskhac50e55sv1c32rv7cd42hof0.apps.googleusercontent.com",
+  "projectId": "g-stock-cb294",
+  "appId": "1:680827429965:web:41fa8f7d53bc90a8df6804",
+  "apiKey": "AIzaSyBYAtzxFyjLIKUY87HOzylAiwir7cIOgbQ",
+  "authDomain": "g-stock-cb294.firebaseapp.com",
+  "storageBucket": "g-stock-cb294.firebasestorage.app",
+  "messagingSenderId": "680827429965",
+  "measurementId": "G-21CMYW96GL",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }
