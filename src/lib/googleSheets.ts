@@ -118,10 +118,10 @@ const initializeSheetHeaders = async (accessToken: string, spreadsheetId: string
 
   // Write headers for Sales
   const salesHeaders = [
-    ['معرف البيع (Sale ID)', 'التاريخ (Date)', 'اسم الموديل (Model Name)', 'الكمية الكلية بالأزواج (Total Pairs Sold)', 'المبلغ الإجمالي (Total Paid)', 'نوع البيع (Sell Type)', 'الكراتين المباعة (Cartons Quantity)', 'الأزواج المباعة (Pairs Quantity)', 'المنتجات الفرعية (Sub Items)', 'اسم الزبون (Customer Name)', 'رقم الهاتف (Phone)', 'الولاية (State/Wilaya)', 'البلدية (Municipality/Baladiya)', 'عدد الكوليات (Number of Parcels)', 'حالة الطلب (Order Status)']
+    ['معرف البيع (Sale ID)', 'التاريخ (Date)', 'اسم الموديل (Model Name)', 'الكمية الكلية بالأزواج (Total Pairs Sold)', 'المبلغ الإجمالي (Total Paid)', 'نوع البيع (Sell Type)', 'الكراتين المباعة (Cartons Quantity)', 'الأزواج المباعة (Pairs Quantity)', 'المنتجات الفرعية (Sub Items)', 'اسم الزبون (Customer Name)', 'رقم الهاتف (Phone)', 'الولاية (State/Wilaya)', 'البلدية (Municipality/Baladiya)', 'عدد الكوليات (Number of Parcels)', 'كود تتبع التوصيل (Tracking Code)', 'حالة الطلب (Order Status)']
   ];
 
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A1:O1")}?valueInputOption=USER_ENTERED`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A1:P1")}?valueInputOption=USER_ENTERED`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -209,18 +209,19 @@ export const syncSalesToSheet = async (accessToken: string, spreadsheetId: strin
       s.customerState || '',
       s.customerMunicipality || '',
       s.customerColis || 0,
+      s.trackingCode || '',
       statusMap[s.status || 'pending'] || 'قيد الانتظار'
     ];
   });
 
   // Clear previous values first
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:O2000")}:clear`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:P2000")}:clear`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` }
   });
 
   if (values.length > 0) {
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:O" + (1 + values.length))}?valueInputOption=USER_ENTERED`, {
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent("'المبيعات (Sales)'!A2:P" + (1 + values.length))}?valueInputOption=USER_ENTERED`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${accessToken}`,

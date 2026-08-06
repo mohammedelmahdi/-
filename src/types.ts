@@ -55,6 +55,7 @@ export interface Sale {
   customerState?: string;
   customerMunicipality?: string;
   customerColis?: number;
+  trackingCode?: string;
   status?: SaleStatus;
 }
 

@@ -11,6 +11,7 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
   const [isPrinting, setIsPrinting] = useState(false);
   const [printSuccess, setPrintSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [trackingCopied, setTrackingCopied] = useState(false);
 
   if (!sale) return null;
 
@@ -120,6 +121,35 @@ export default function ReceiptModal({ sale, onClose }: ReceiptModalProps) {
                     <div className="flex justify-between">
                       <span>عدد الطرود (الكوليات):</span>
                       <span className="font-bold text-slate-950">{sale.customerColis} طرد</span>
+                    </div>
+                  )}
+                  {sale.trackingCode && (
+                    <div className="flex justify-between items-center bg-slate-100 p-2 rounded-lg border border-slate-200 mt-1">
+                      <span className="font-bold text-slate-700 text-xs">كود تتبع التوصيل:</span>
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-slate-950 text-xs">
+                        <span>{sale.trackingCode}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (sale.trackingCode) {
+                              navigator.clipboard.writeText(sale.trackingCode);
+                              setTrackingCopied(true);
+                              setTimeout(() => setTrackingCopied(false), 2000);
+                            }
+                          }}
+                          className="p-1 hover:bg-slate-200 rounded transition-colors text-slate-600 hover:text-slate-950 cursor-pointer flex items-center gap-1"
+                          title="نسخ كود التتبع"
+                        >
+                          {trackingCopied ? (
+                            <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-sans font-bold">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              تم النسخ!
+                            </span>
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </>

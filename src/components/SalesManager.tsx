@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, FormEvent } from 'react';
+import { useState, useMemo, useEffect, FormEvent, MouseEvent, Fragment } from 'react';
 import { Product, Sale, SaleItem, SaleStatus, formatCurrency } from '../types';
 import { 
   ShoppingCart, 
@@ -15,8 +15,50 @@ import {
   AlertCircle,
   Edit2,
   Filter,
-  MapPin
+  MapPin,
+  Truck,
+  Copy,
+  Eye,
+  Package,
+  Phone,
+  Hash,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+
+function TrackingCodeBadge({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!code) return;
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="inline-flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/30 hover:border-indigo-500/50 px-2.5 py-1 rounded-xl text-xs font-mono font-bold text-indigo-300 transition-all group">
+      <Truck className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+      <span className="select-all tracking-wide text-slate-100">{code}</span>
+      <button
+        onClick={handleCopy}
+        type="button"
+        title="نسخ كود التتبع"
+        className="p-1 hover:bg-indigo-500/30 rounded-lg transition-colors text-indigo-400 hover:text-indigo-200 cursor-pointer mr-0.5 flex items-center justify-center"
+      >
+        {copied ? (
+          <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-sans font-bold">
+            <Check className="w-3.5 h-3.5 text-emerald-400" />
+            تم النسخ!
+          </span>
+        ) : (
+          <Copy className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+        )}
+      </button>
+    </div>
+  );
+}
 
 interface SalesManagerProps {
   products: Product[];
@@ -64,6 +106,16 @@ export default function SalesManager({
   const [historyStateFilter, setHistoryStateFilter] = useState('all');
   const [historyDateFilter, setHistoryDateFilter] = useState('all');
 
+  // Expanded Sale Cards for Inline Dropdown Items List
+  const [expandedSaleIds, setExpandedSaleIds] = useState<Record<string, boolean>>({});
+
+  const toggleSaleExpand = (saleId: string) => {
+    setExpandedSaleIds(prev => ({
+      ...prev,
+      [saleId]: !prev[saleId]
+    }));
+  };
+
   // Helper to get YYYY-MM-DD format in local timezone
   const getLocalDateString = (date: Date): string => {
     const year = date.getFullYear();
@@ -89,6 +141,7 @@ export default function SalesManager({
   const [customerState, setCustomerState] = useState(''); // الولاية
   const [customerMunicipality, setCustomerMunicipality] = useState(''); // البلدية
   const [customerColis, setCustomerColis] = useState(''); // عدد الكوليات / الطرود
+  const [trackingCode, setTrackingCode] = useState(''); // كود تتبع التوصيل
 
   // Editing Sale States
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
@@ -97,6 +150,7 @@ export default function SalesManager({
   const [editCustomerState, setEditCustomerState] = useState('');
   const [editCustomerMunicipality, setEditCustomerMunicipality] = useState('');
   const [editCustomerColis, setEditCustomerColis] = useState<string>('');
+  const [editTrackingCode, setEditTrackingCode] = useState<string>('');
   const [editTotalPrice, setEditTotalPrice] = useState<string>('');
   const [editItems, setEditItems] = useState<SaleItem[]>([]);
   const [editProductSearch, setEditProductSearch] = useState('');
@@ -108,6 +162,7 @@ export default function SalesManager({
     setEditCustomerState(sale.customerState || '');
     setEditCustomerMunicipality(sale.customerMunicipality || '');
     setEditCustomerColis(sale.customerColis !== undefined ? String(sale.customerColis) : '1');
+    setEditTrackingCode(sale.trackingCode || '');
     
     const initialItems = sale.items && sale.items.length > 0 
       ? [...sale.items] 
@@ -278,7 +333,8 @@ export default function SalesManager({
       customerPhone: editCustomerPhone.trim(),
       customerState: editCustomerState.trim(),
       customerMunicipality: editCustomerMunicipality.trim(),
-      customerColis: editCustomerColis ? Number(editCustomerColis) : editingSale.customerColis
+      customerColis: editCustomerColis ? Number(editCustomerColis) : editingSale.customerColis,
+      trackingCode: editTrackingCode.trim() || undefined
     };
 
     onUpdateSale(updated);
@@ -533,7 +589,8 @@ export default function SalesManager({
       customerPhone: customerPhone.trim(),
       customerState: customerState.trim(),
       customerMunicipality: customerMunicipality.trim(),
-      customerColis: finalColis
+      customerColis: finalColis,
+      trackingCode: trackingCode.trim() || undefined
     });
 
     // Reset state & show success trigger
@@ -545,6 +602,7 @@ export default function SalesManager({
     setCustomerState('');
     setCustomerMunicipality('');
     setCustomerColis('');
+    setTrackingCode('');
     
     setTimeout(() => {
       setSaleSuccess(false);
@@ -601,7 +659,8 @@ export default function SalesManager({
         s.productName.toLowerCase().includes(searchLower) || 
         s.id.toLowerCase().includes(searchLower) ||
         s.customerName?.toLowerCase().includes(searchLower) ||
-        s.customerPhone?.toLowerCase().includes(searchLower)
+        s.customerPhone?.toLowerCase().includes(searchLower) ||
+        s.trackingCode?.toLowerCase().includes(searchLower)
       );
     }
     
@@ -964,6 +1023,20 @@ export default function SalesManager({
                           className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right h-10"
                         />
                       </div>
+
+                      <div>
+                        <label className="block text-[10px] text-indigo-400 font-bold mb-1 flex items-center gap-1">
+                          <Truck className="w-3 h-3" />
+                          <span>كود تتبع التوصيل (Tracking Code) - اختياري</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={trackingCode}
+                          onChange={(e) => setTrackingCode(e.target.value)}
+                          placeholder="مثال: YAL-12345678"
+                          className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 text-right font-mono h-10"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1036,7 +1109,7 @@ export default function SalesManager({
                 <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                 <input 
                   type="text" 
-                  placeholder="ابحث بالمنتج، اسم الزبون، الهاتف أو المعرف..."
+                  placeholder="ابحث بالمنتج، اسم الزبون، الهاتف، المعرف، أو كود التتبع..."
                   value={historySearch}
                   onChange={(e) => setHistorySearch(e.target.value)}
                   className="w-full pr-11 pl-4 py-2.5 bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm rounded-xl h-12 text-slate-200 placeholder-slate-500 text-right font-sans"
@@ -1129,13 +1202,16 @@ export default function SalesManager({
               {/* Mobile View list */}
               <div className="grid grid-cols-1 gap-4 md:hidden">
                 {filteredSalesHistory.map((sale) => (
-                  <div key={sale.id} className="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-md space-y-3 text-right">
+                  <div 
+                    key={sale.id} 
+                    className="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-md space-y-3 text-right transition-all"
+                  >
                     <div className="flex items-start justify-between" dir="rtl">
                       <div className="text-right">
                         <p className="text-[10px] font-bold font-mono text-slate-500 uppercase">المعرف: {sale.id.slice(0, 8)}</p>
                         <h4 className="text-sm font-bold text-slate-200 mt-0.5">{sale.productName}</h4>
                       </div>
-                      <span className="text-sm font-extrabold text-slate-100">
+                      <span className="text-sm font-extrabold text-emerald-400">
                         {formatCurrency(sale.totalPrice)}
                       </span>
                     </div>
@@ -1147,6 +1223,97 @@ export default function SalesManager({
                         {new Date(sale.date).toLocaleDateString('ar-DZ')} {new Date(sale.date).toLocaleTimeString('ar-DZ', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
+
+                    {/* Inline Dropdown List Toggle Button */}
+                    <button 
+                      type="button"
+                      onClick={() => toggleSaleExpand(sale.id)}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        expandedSaleIds[sale.id] 
+                          ? 'bg-indigo-950/60 text-indigo-200 border-indigo-500/50 shadow-inner' 
+                          : 'bg-slate-950 text-indigo-300 border-indigo-500/20 hover:bg-indigo-950/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <span>المنتجات المطلوبة والكمية ({sale.items?.length || 1})</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          {expandedSaleIds[sale.id] ? 'إخفاء' : 'عرض القائمة'}
+                        </span>
+                        {expandedSaleIds[sale.id] ? (
+                          <ChevronUp className="w-4 h-4 text-indigo-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Inline Dropdown List Content inside Card */}
+                    {expandedSaleIds[sale.id] && (
+                      <div className="bg-slate-950 rounded-xl border border-indigo-500/30 overflow-hidden text-right space-y-0 animate-in fade-in duration-200" dir="rtl">
+                        <div className="p-2.5 bg-indigo-950/40 border-b border-indigo-500/20 text-[11px] font-bold text-indigo-300 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <Package className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>قائمة المنتجات المطلوبة والكمية:</span>
+                          </span>
+                          <span className="font-mono text-emerald-400 text-xs">{formatCurrency(sale.totalPrice)}</span>
+                        </div>
+
+                        <div className="divide-y divide-slate-800/80">
+                          {sale.items && sale.items.length > 0 ? (
+                            sale.items.map((item, idx) => (
+                              <div key={idx} className="p-3 space-y-1.5 hover:bg-slate-900/40 transition-colors">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-bold text-slate-100 flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500 font-mono">#{idx + 1}</span>
+                                    {item.productName}
+                                  </span>
+                                  <span className="font-extrabold text-emerald-400 font-mono">{formatCurrency(item.subtotal)}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+                                  {item.sellType === 'carton' ? (
+                                    <span className="inline-flex items-center gap-1 bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-bold">
+                                      📦 {item.cartonsSold} كرتون ({item.pairsSold || item.totalPairs} زوج)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded border border-purple-500/20 font-bold">
+                                      👟 {item.totalPairs} زوج / قطعة
+                                    </span>
+                                  )}
+                                  <span className="text-slate-400">الوحدة: {formatCurrency(item.unitPrice)}</span>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="p-3 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-bold text-slate-100">{sale.productName}</span>
+                                <span className="font-extrabold text-emerald-400 font-mono">{formatCurrency(sale.totalPrice)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                <span className="bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20 font-bold">
+                                  الكمية: {sale.quantity} وحدة/زوج
+                                </span>
+                                <span className="text-slate-400">الوحدة: {formatCurrency(sale.sellingPriceAtSale)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tracking Code Badge Banner on Mobile Card */}
+                    {sale.trackingCode && (
+                      <div className="bg-indigo-950/40 border border-indigo-500/30 p-2.5 rounded-xl flex items-center justify-between" dir="rtl">
+                        <span className="text-[11px] text-indigo-300 font-bold flex items-center gap-1.5">
+                          <Truck className="w-4 h-4 text-indigo-400" />
+                          <span>رمز التتبع:</span>
+                        </span>
+                        <TrackingCodeBadge code={sale.trackingCode} />
+                      </div>
+                    )}
 
                     {(sale.customerName || sale.customerPhone || sale.customerState || sale.customerMunicipality) && (
                       <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/40 text-[11px] text-slate-300 space-y-1 text-right" dir="rtl">
@@ -1241,104 +1408,198 @@ export default function SalesManager({
                   </thead>
                   <tbody className="divide-y divide-slate-800">
                     {filteredSalesHistory.map((sale) => (
-                      <tr key={sale.id} className="hover:bg-slate-800/30 transition-colors">
-                        <td className="p-4 text-right">
-                          <span className="text-xs font-bold font-mono text-slate-400">
-                            {sale.id.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="p-4 text-xs text-slate-400 font-medium text-right">
-                          {new Date(sale.date).toLocaleDateString('ar-DZ')} في {new Date(sale.date).toLocaleTimeString('ar-DZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </td>
-                        <td className="p-4 font-bold text-slate-200 text-sm text-right">
-                          {sale.productName}
-                        </td>
-                        <td className="p-4 text-right">
-                          {sale.customerName ? (
-                            <div className="text-xs space-y-0.5">
-                              <p className="font-bold text-slate-300">{sale.customerName}</p>
-                              {sale.customerPhone && <p className="text-slate-500 font-mono text-[10px]">{sale.customerPhone}</p>}
-                              {(sale.customerState || sale.customerMunicipality) && (
-                                <p className="text-slate-500 text-[10px]">
-                                  {[sale.customerMunicipality, sale.customerState].filter(Boolean).join(' - ')}
-                                </p>
-                              )}
-                              {sale.customerColis !== undefined && (
-                                <p className="text-indigo-400 font-bold text-[10px]">الطرود: {sale.customerColis} كولية</p>
+                      <Fragment key={sale.id}>
+                        <tr 
+                          className={`hover:bg-slate-800/60 transition-colors group ${
+                            expandedSaleIds[sale.id] ? 'bg-indigo-950/20' : ''
+                          }`}
+                        >
+                          <td className="p-4 text-right">
+                            <span className="text-xs font-bold font-mono text-slate-400 group-hover:text-indigo-400 transition-colors">
+                              {sale.id.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="p-4 text-xs text-slate-400 font-medium text-right">
+                            {new Date(sale.date).toLocaleDateString('ar-DZ')} في {new Date(sale.date).toLocaleTimeString('ar-DZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td className="p-4 font-bold text-slate-200 text-sm text-right">
+                            <div className="flex flex-col text-right">
+                              <span className="font-bold group-hover:text-indigo-300 transition-colors">{sale.productName}</span>
+                              {sale.items && sale.items.length > 1 && (
+                                <span className="text-[10px] text-indigo-400 font-semibold mt-0.5">
+                                  +{sale.items.length - 1} منتجات فرعية مسجلة
+                                </span>
                               )}
                             </div>
-                          ) : (
-                            <span className="text-slate-600 text-xs">-</span>
-                          )}
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex flex-col gap-1 items-start">
-                            {sale.status === 'delivered' && (
-                              <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[10px] font-bold">تم التوصيل ✅</span>
+                          </td>
+                          <td className="p-4 text-right">
+                            {sale.customerName ? (
+                              <div className="text-xs space-y-0.5">
+                                <p className="font-bold text-slate-300">{sale.customerName}</p>
+                                {sale.customerPhone && <p className="text-slate-500 font-mono text-[10px]">{sale.customerPhone}</p>}
+                                {(sale.customerState || sale.customerMunicipality) && (
+                                  <p className="text-slate-500 text-[10px]">
+                                    {[sale.customerMunicipality, sale.customerState].filter(Boolean).join(' - ')}
+                                  </p>
+                                )}
+                                {sale.customerColis !== undefined && (
+                                  <p className="text-indigo-400 font-bold text-[10px]">الطرود: {sale.customerColis} كولية</p>
+                                )}
+                                {sale.trackingCode && (
+                                  <div className="mt-1">
+                                    <TrackingCodeBadge code={sale.trackingCode} />
+                                  </div>
+                                )}
+                              </div>
+                            ) : sale.trackingCode ? (
+                              <div className="text-xs">
+                                <TrackingCodeBadge code={sale.trackingCode} />
+                              </div>
+                            ) : (
+                              <span className="text-slate-600 text-xs">-</span>
                             )}
-                            {sale.status === 'shipped' && (
-                              <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-[10px] font-bold">تم الشحن 🚚</span>
-                            )}
-                            {sale.status === 'returned' && (
-                              <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-md text-[10px] font-bold">مسترجع ↩️</span>
-                            )}
-                            {sale.status === 'returned_to_supplier' && (
-                              <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md text-[10px] font-bold">معاد للمورد 🔄</span>
-                            )}
-                            {(sale.status === 'pending' || !sale.status) && (
-                              <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-[10px] font-bold">قيد الانتظار ⏳</span>
-                            )}
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex flex-col gap-1 items-start">
+                              {sale.status === 'delivered' && (
+                                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md text-[10px] font-bold">تم التوصيل ✅</span>
+                              )}
+                              {sale.status === 'shipped' && (
+                                <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-[10px] font-bold">تم الشحن 🚚</span>
+                              )}
+                              {sale.status === 'returned' && (
+                                <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-md text-[10px] font-bold">مسترجع ↩️</span>
+                              )}
+                              {sale.status === 'returned_to_supplier' && (
+                                <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md text-[10px] font-bold">معاد للمورد 🔄</span>
+                              )}
+                              {(sale.status === 'pending' || !sale.status) && (
+                                <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-[10px] font-bold">قيد الانتظار ⏳</span>
+                              )}
 
-                            <select
-                              value={sale.status || 'pending'}
-                              onChange={(e) => onUpdateSaleStatus(sale.id, e.target.value as SaleStatus)}
-                              className="bg-slate-950 border border-slate-800 text-[10px] font-bold text-slate-300 rounded-lg px-1.5 py-0.5 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 cursor-pointer h-6"
-                            >
-                              <option value="pending">انتظار</option>
-                              <option value="shipped">تم الشحن</option>
-                              <option value="delivered">تم التوصيل</option>
-                              <option value="returned">مسترجع</option>
-                              <option value="returned_to_supplier">إعادة للمورد</option>
-                            </select>
-                          </div>
-                        </td>
-                        <td className="p-4 text-center font-bold text-slate-300 text-sm">
-                          {sale.quantity}
-                        </td>
-                        <td className="p-4 text-left text-slate-400 font-semibold text-sm">
-                          {formatCurrency(sale.sellingPriceAtSale)}
-                        </td>
-                        <td className="p-4 text-left text-slate-100 font-extrabold text-sm">
-                          {formatCurrency(sale.totalPrice)}
-                        </td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button 
-                              onClick={() => startEditingSale(sale)}
-                              className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors cursor-pointer"
-                              title="تعديل المبيعة"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                              تعديل
-                            </button>
-                            <button 
-                              onClick={() => onOpenReceiptModal(sale)}
-                              className="inline-flex items-center gap-1 bg-indigo-500/10 text-indigo-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors cursor-pointer"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                              الوصل
-                            </button>
-                            <button 
-                              onClick={() => setSaleToDelete(sale)}
-                              className="inline-flex items-center gap-1 bg-rose-500/10 text-rose-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-colors cursor-pointer"
-                              title="حذف عملية البيع"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              حذف
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                              <select
+                                value={sale.status || 'pending'}
+                                onChange={(e) => onUpdateSaleStatus(sale.id, e.target.value as SaleStatus)}
+                                className="bg-slate-950 border border-slate-800 text-[10px] font-bold text-slate-300 rounded-lg px-1.5 py-0.5 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 cursor-pointer h-6"
+                              >
+                                <option value="pending">انتظار</option>
+                                <option value="shipped">تم الشحن</option>
+                                <option value="delivered">تم التوصيل</option>
+                                <option value="returned">مسترجع</option>
+                                <option value="returned_to_supplier">إعادة للمورد</option>
+                              </select>
+                            </div>
+                          </td>
+                          <td className="p-4 text-center font-bold text-slate-300 text-sm">
+                            {sale.quantity}
+                          </td>
+                          <td className="p-4 text-left text-slate-400 font-semibold text-sm">
+                            {formatCurrency(sale.sellingPriceAtSale)}
+                          </td>
+                          <td className="p-4 text-left text-slate-100 font-extrabold text-sm">
+                            {formatCurrency(sale.totalPrice)}
+                          </td>
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button 
+                                type="button"
+                                onClick={() => toggleSaleExpand(sale.id)}
+                                className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                                  expandedSaleIds[sale.id]
+                                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                                    : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20 hover:bg-indigo-500/20'
+                                }`}
+                                title="عرض المنتجات المنسدلة والكميات"
+                              >
+                                <Package className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>المنتجات ({sale.items?.length || 1})</span>
+                                {expandedSaleIds[sale.id] ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <button 
+                                onClick={() => startEditingSale(sale)}
+                                className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-colors cursor-pointer"
+                                title="تعديل المبيعة"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                onClick={() => onOpenReceiptModal(sale)}
+                                className="inline-flex items-center gap-1 bg-indigo-500/10 text-indigo-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors cursor-pointer"
+                                title="طباعة الوصل"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                onClick={() => setSaleToDelete(sale)}
+                                className="inline-flex items-center gap-1 bg-rose-500/10 text-rose-400 text-xs font-bold px-2 py-1.5 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                title="حذف المبيعة"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Inline Dropdown Sub-Row for Desktop Table */}
+                        {expandedSaleIds[sale.id] && (
+                          <tr className="bg-slate-950/90 border-b border-indigo-500/40">
+                            <td colSpan={9} className="p-4">
+                              <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-4 text-right space-y-3 animate-in fade-in duration-200" dir="rtl">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <Package className="w-4 h-4 text-indigo-400" />
+                                    <span className="text-xs font-bold text-slate-100">
+                                      قائمة المنتجات المطلوبة والكميات (الطلب #{sale.id.slice(0, 8).toUpperCase()})
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-mono font-bold text-indigo-300">
+                                    المبلغ الإجمالي الصافي: <strong className="text-emerald-400 text-sm font-extrabold">{formatCurrency(sale.totalPrice)}</strong>
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {sale.items && sale.items.length > 0 ? (
+                                    sale.items.map((item, idx) => (
+                                      <div key={idx} className="bg-slate-950 border border-slate-800/80 p-3 rounded-xl flex flex-col justify-between space-y-2">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <p className="text-xs font-bold text-slate-100">{item.productName}</p>
+                                          <span className="text-[10px] font-mono text-slate-500 font-bold bg-slate-900 px-1.5 py-0.5 rounded">#{idx + 1}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800/80">
+                                          <span className="text-indigo-300 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 text-[11px]">
+                                            {item.sellType === 'carton' ? `📦 ${item.cartonsSold} كرتون (${item.pairsSold || item.totalPairs} زوج)` : `👟 ${item.totalPairs} زوج / قطعة`}
+                                          </span>
+                                          <div className="text-left">
+                                            <span className="text-[10px] text-slate-500 block">المجموع</span>
+                                            <span className="font-mono font-bold text-emerald-400">{formatCurrency(item.subtotal)}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="bg-slate-950 border border-slate-800/80 p-3 rounded-xl flex flex-col justify-between space-y-2">
+                                      <p className="text-xs font-bold text-slate-100">{sale.productName}</p>
+                                      <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800/80">
+                                        <span className="text-indigo-300 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 text-[11px]">
+                                          الكمية: {sale.quantity} وحدة/زوج
+                                        </span>
+                                        <div className="text-left">
+                                          <span className="text-[10px] text-slate-500 block">المجموع</span>
+                                          <span className="font-mono font-bold text-emerald-400">{formatCurrency(sale.totalPrice)}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -1489,6 +1750,20 @@ export default function SalesManager({
                     onChange={(e) => setEditCustomerColis(e.target.value)}
                     placeholder="1"
                     className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 text-center h-9"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-indigo-400 font-bold mb-1 flex items-center gap-1">
+                    <Truck className="w-3 h-3" />
+                    <span>كود تتبع التوصيل</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editTrackingCode}
+                    onChange={(e) => setEditTrackingCode(e.target.value)}
+                    placeholder="رمز التتبع..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 text-xs rounded-xl px-3 py-2 text-slate-200 text-right font-mono h-9"
                   />
                 </div>
               </div>
