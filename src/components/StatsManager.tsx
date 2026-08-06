@@ -374,19 +374,16 @@ export default function StatsManager({
 
       if (sale.items && sale.items.length > 0) {
         buyingCost = sale.items.reduce((sum, item) => {
-          const product = products.find(p => p.id === item.productId);
-          const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || item.buyingPriceAtSale;
-          const pairsPerCtn = product?.pairsPerCarton || 12;
-          const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
-          
           if (item.sellType === 'carton') {
-            return sum + (item.cartonsQuantity * cartonBuying);
+            const cartonsQty = item.cartonsQuantity || 0;
+            return sum + (cartonsQty * (item.buyingPriceAtSale || 0));
           } else {
-            return sum + (item.pairsQuantity * singleBuying);
+            const pairsQty = item.pairsQuantity || item.quantity || 0;
+            return sum + (pairsQty * (item.buyingPriceAtSale || 0));
           }
         }, 0);
       } else {
-        buyingCost = sale.buyingPriceAtSale * sale.quantity;
+        buyingCost = (sale.buyingPriceAtSale || 0) * sale.quantity;
       }
 
       totalSalesVolume += saleQty;
@@ -500,9 +497,21 @@ export default function StatsManager({
       if (sale.items && sale.items.length > 0) {
         sale.items.forEach(item => {
           const product = products.find(p => p.id === item.productId);
-          const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || item.buyingPriceAtSale;
           const pairsPerCtn = product?.pairsPerCarton || 12;
-          const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
+
+          let singleBuying = 0;
+          let cartonBuying = 0;
+          let itemCost = 0;
+
+          if (item.sellType === 'carton') {
+            cartonBuying = item.buyingPriceAtSale || 0;
+            singleBuying = cartonBuying / pairsPerCtn;
+            itemCost = (item.cartonsQuantity || 0) * cartonBuying;
+          } else {
+            singleBuying = item.buyingPriceAtSale || 0;
+            cartonBuying = singleBuying * pairsPerCtn;
+            itemCost = (item.pairsQuantity || item.quantity || 0) * singleBuying;
+          }
 
           const record = breakdownMap.get(item.productId) || {
             id: item.productId,
@@ -516,21 +525,19 @@ export default function StatsManager({
           };
 
           if (item.sellType === 'carton') {
-            record.cartonsDelivered += item.cartonsQuantity;
-            record.totalBuyingCost += item.cartonsQuantity * cartonBuying;
+            record.cartonsDelivered += item.cartonsQuantity || 0;
           } else {
-            record.pairsDelivered += item.pairsQuantity;
-            record.totalBuyingCost += item.pairsQuantity * singleBuying;
+            record.pairsDelivered += item.pairsQuantity || item.quantity || 0;
           }
+          record.totalBuyingCost += itemCost;
 
           breakdownMap.set(item.productId, record);
         });
       } else {
         // Flat structure fallback
-        const product = products.find(p => p.id === sale.productId);
-        const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || sale.buyingPriceAtSale;
-        const pairsPerCtn = product?.pairsPerCarton || 12;
-        const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
+        const singleBuying = sale.buyingPriceAtSale || 0;
+        const cartonBuying = singleBuying * 12;
+        const itemCost = sale.quantity * singleBuying;
 
         const record = breakdownMap.get(sale.productId) || {
           id: sale.productId,
@@ -544,7 +551,7 @@ export default function StatsManager({
         };
 
         record.pairsDelivered += sale.quantity;
-        record.totalBuyingCost += sale.quantity * singleBuying;
+        record.totalBuyingCost += itemCost;
 
         breakdownMap.set(sale.productId, record);
       }
@@ -580,19 +587,16 @@ export default function StatsManager({
 
       if (sale.items && sale.items.length > 0) {
         buyingCost = sale.items.reduce((sum, item) => {
-          const product = products.find(p => p.id === item.productId);
-          const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || item.buyingPriceAtSale;
-          const pairsPerCtn = product?.pairsPerCarton || 12;
-          const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
-          
           if (item.sellType === 'carton') {
-            return sum + (item.cartonsQuantity * cartonBuying);
+            const cartonsQty = item.cartonsQuantity || 0;
+            return sum + (cartonsQty * (item.buyingPriceAtSale || 0));
           } else {
-            return sum + (item.pairsQuantity * singleBuying);
+            const pairsQty = item.pairsQuantity || item.quantity || 0;
+            return sum + (pairsQty * (item.buyingPriceAtSale || 0));
           }
         }, 0);
       } else {
-        buyingCost = sale.buyingPriceAtSale * sale.quantity;
+        buyingCost = (sale.buyingPriceAtSale || 0) * sale.quantity;
       }
 
       const saleProfit = rev - buyingCost;
@@ -659,19 +663,16 @@ export default function StatsManager({
       let buyingCost = 0;
       if (sale.items && sale.items.length > 0) {
         buyingCost = sale.items.reduce((sum, item) => {
-          const product = products.find(p => p.id === item.productId);
-          const singleBuying = product?.singlePairBuyingPrice || product?.buyingPrice || item.buyingPriceAtSale;
-          const pairsPerCtn = product?.pairsPerCarton || 12;
-          const cartonBuying = product?.buyingPricePerCarton || (singleBuying * pairsPerCtn);
-          
           if (item.sellType === 'carton') {
-            return sum + (item.cartonsQuantity * cartonBuying);
+            const cartonsQty = item.cartonsQuantity || 0;
+            return sum + (cartonsQty * (item.buyingPriceAtSale || 0));
           } else {
-            return sum + (item.pairsQuantity * singleBuying);
+            const pairsQty = item.pairsQuantity || item.quantity || 0;
+            return sum + (pairsQty * (item.buyingPriceAtSale || 0));
           }
         }, 0);
       } else {
-        buyingCost = sale.buyingPriceAtSale * sale.quantity;
+        buyingCost = (sale.buyingPriceAtSale || 0) * sale.quantity;
       }
 
       stat.profit += (sale.totalPrice - buyingCost);
