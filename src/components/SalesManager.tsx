@@ -60,6 +60,24 @@ function TrackingCodeBadge({ code }: { code: string }) {
   );
 }
 
+const calculateSaleProfit = (sale: Sale): number => {
+  let buyingCost = 0;
+  if (sale.items && sale.items.length > 0) {
+    buyingCost = sale.items.reduce((sum, item) => {
+      if (item.sellType === 'carton') {
+        const cartonsQty = item.cartonsQuantity || 0;
+        return sum + (cartonsQty * (item.buyingPriceAtSale || 0));
+      } else {
+        const pairsQty = item.pairsQuantity || item.quantity || 0;
+        return sum + (pairsQty * (item.buyingPriceAtSale || 0));
+      }
+    }, 0);
+  } else {
+    buyingCost = (sale.buyingPriceAtSale || 0) * sale.quantity;
+  }
+  return sale.totalPrice - buyingCost;
+};
+
 interface SalesManagerProps {
   products: Product[];
   sales: Sale[];
@@ -1211,9 +1229,14 @@ export default function SalesManager({
                         <p className="text-[10px] font-bold font-mono text-slate-500 uppercase">المعرف: {sale.id.slice(0, 8)}</p>
                         <h4 className="text-sm font-bold text-slate-200 mt-0.5">{sale.productName}</h4>
                       </div>
-                      <span className="text-sm font-extrabold text-emerald-400">
-                        {formatCurrency(sale.totalPrice)}
-                      </span>
+                      <div className="text-left shrink-0">
+                        <span className="text-sm font-extrabold text-emerald-400 block">
+                          {formatCurrency(sale.totalPrice)}
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-300 block mt-0.5">
+                          الفائدة: {formatCurrency(calculateSaleProfit(sale))}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-950 p-2 rounded-lg border border-slate-800/80" dir="rtl">
@@ -1403,6 +1426,7 @@ export default function SalesManager({
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">الكمية</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">سعر الوحدة</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">الإجمالي الصافي</th>
+                      <th className="p-4 text-xs font-bold text-emerald-400 uppercase tracking-wider text-left">الفائدة</th>
                       <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">الإجراءات</th>
                     </tr>
                   </thead>
@@ -1499,6 +1523,9 @@ export default function SalesManager({
                           <td className="p-4 text-left text-slate-100 font-extrabold text-sm">
                             {formatCurrency(sale.totalPrice)}
                           </td>
+                          <td className="p-4 text-left text-emerald-400 font-extrabold text-sm">
+                            {formatCurrency(calculateSaleProfit(sale))}
+                          </td>
                           <td className="p-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
                               <button 
@@ -1547,7 +1574,7 @@ export default function SalesManager({
                         {/* Inline Dropdown Sub-Row for Desktop Table */}
                         {expandedSaleIds[sale.id] && (
                           <tr className="bg-slate-950/90 border-b border-indigo-500/40">
-                            <td colSpan={9} className="p-4">
+                            <td colSpan={10} className="p-4">
                               <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-4 text-right space-y-3 animate-in fade-in duration-200" dir="rtl">
                                 <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
                                   <div className="flex items-center gap-2">
